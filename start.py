@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 
 
 load_dotenv()
-token = os.getenv('DISCORD_TOKEN')
+token = os.getenv('ASKAR_TOKEN')
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
