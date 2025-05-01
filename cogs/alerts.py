@@ -4,6 +4,7 @@ from pymongo import MongoClient
 from bson import ObjectId
 import aiohttp
 import os
+from discord import app_commands
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")  # Clé API YouTube
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -26,20 +27,20 @@ class Alerts(commands.Cog):
     async def cog_check(self, ctx):
         return ctx.author.guild_permissions.administrator
 
-    @commands.group(name="alert", invoke_without_command=True)
-    async def alert(self, ctx):
-        await ctx.send("Sous-commandes : `add`, `set-role`, `set-channel`")
+    @app_commands.command(name="alert", description="Gérer les alertes")
+    async def alert(self, interaction: discord.Interaction):
+        await interaction.response.send_message("Sous-commandes : `add`, `set-role`, `set-channel`")
 
-    @alert.command(name="add")
-    async def add_alert(self, ctx, platform: str, channel_identifier: str, content_type: str):
+    @app_commands.command(name="add", description="Ajouter une alerte")
+    async def add_alert(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str):
         platform = platform.lower()
         content_type = content_type.lower()
 
         if platform not in ["youtube", "twitch"]:
-            return await ctx.send("❌ Plateforme invalide (youtube ou twitch).")
+            return await interaction.response.send_message("❌ Plateforme invalide (youtube ou twitch).")
         
         if content_type not in ["video", "short", "live", "tiktok"]:
-            return await ctx.send("❌ Type de contenu invalide.")
+            return await interaction.response.send_message("❌ Type de contenu invalide.")
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
         alert = self.alerts_collection.find_one(query)
@@ -47,16 +48,16 @@ class Alerts(commands.Cog):
         if alert:
             if content_type not in alert["types"]:
                 self.alerts_collection.update_one(
-                    {"_id": ObjectId(alert["_id"])},
-                    {"$push": {"types": content_type}}
-                )
-                await ctx.send(f"✅ Contenu `{content_type}` ajouté pour {channel_identifier}.")
+                    {"_id": ObjectId(alert["_id"])}),
+                {"$push": {"types": content_type}}
+                
+                await interaction.response.send_message(f"✅ Contenu `{content_type}` ajouté pour {channel_identifier}.")
             else:
                 self.alerts_collection.update_one(
-                    {"_id": ObjectId(alert["_id"])},
-                    {"$pull": {"types": content_type}}
-                )
-                await ctx.send(f"❌ Contenu `{content_type}` retiré pour {channel_identifier}.")
+                    {"_id": ObjectId(alert["_id"])}),
+                {"$pull": {"types": content_type}}
+                
+                await interaction.response.send_message(f"❌ Contenu `{content_type}` retiré pour {channel_identifier}.")
         else:
             new_alert = {
                 "channel_id": channel_identifier if platform == "youtube" else None,
@@ -69,46 +70,46 @@ class Alerts(commands.Cog):
                     "tiktok": None
                 },
                 "target_channel_id": None,
-                "owner": ctx.author.id
+                "owner": interaction.user.id
             }
             self.alerts_collection.insert_one(new_alert)
-            await ctx.send(f"🎉 Nouvelle alerte créée pour {channel_identifier} ({content_type}).")
+            await interaction.response.send_message(f"🎉 Nouvelle alerte créée pour {channel_identifier} ({content_type}).")
 
-    @alert.command(name="set-role")
-    async def set_role(self, ctx, platform: str, channel_identifier: str, content_type: str, role: discord.Role):
+    @app_commands.command(name="set-role", description="Définir un rôle pour une alerte")
+    async def set_role(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str, role: discord.Role):
         platform = platform.lower()
         content_type = content_type.lower()
 
         if content_type not in ["video", "short", "live", "tiktok"]:
-            return await ctx.send("❌ Type invalide.")
+            return await interaction.response.send_message("❌ Type invalide.")
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
         alert = self.alerts_collection.find_one(query)
 
         if not alert:
-            return await ctx.send("❌ Cette alerte n'existe pas.")
+            return await interaction.response.send_message("❌ Cette alerte n'existe pas.")
 
         self.alerts_collection.update_one(
-            {"_id": ObjectId(alert["_id"])},
-            {"$set": {f"notif_roles.{content_type}": role.id}}
-        )
-        await ctx.send(f"🔔 Rôle pour `{content_type}` mis à jour.")
+            {"_id": ObjectId(alert["_id"])}),
+        {"$set": {f"notif_roles.{content_type}": role.id}}
+        
+        await interaction.response.send_message(f"🔔 Rôle pour `{content_type}` mis à jour.")
 
-    @alert.command(name="set-channel")
-    async def set_channel(self, ctx, platform: str, channel_identifier: str, channel: discord.TextChannel):
+    @app_commands.command(name="set-channel", description="Définir le salon des notifications pour une alerte")
+    async def set_channel(self, interaction: discord.Interaction, platform: str, channel_identifier: str, channel: discord.TextChannel):
         platform = platform.lower()
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
         alert = self.alerts_collection.find_one(query)
 
         if not alert:
-            return await ctx.send("❌ Cette alerte n'existe pas.")
+            return await interaction.response.send_message("❌ Cette alerte n'existe pas.")
 
         self.alerts_collection.update_one(
-            {"_id": ObjectId(alert["_id"])},
-            {"$set": {"target_channel_id": channel.id}}
-        )
-        await ctx.send(f"📢 Salon de notification mis à jour.")
+            {"_id": ObjectId(alert["_id"])}),
+        {"$set": {"target_channel_id": channel.id}}
+        
+        await interaction.response.send_message(f"📢 Salon de notification mis à jour.")
 
     @tasks.loop(minutes=5)
     async def check_alerts(self):
