@@ -119,10 +119,14 @@ class Alerts(commands.Cog):
         if not alert:
             return await interaction.response.send_message("❌ Cette alerte n'existe pas.")
 
+        update_data = { "$set": { f"notif_roles.{content_type}": role.id } }
+
+        # Mise à jour du document dans MongoDB
         self.alerts_collection.update_one(
-            {"_id": ObjectId(alert["_id"])}),
-        {"$set": {f"notif_roles.{content_type}": role.id}}
-        
+            {"_id": ObjectId(alert["_id"])}  # Le filtre de recherche
+            , update_data  # L'opération de mise à jour
+        )
+
         await interaction.response.send_message(f"🔔 Rôle pour `{content_type}` mis à jour.")
 
     @app_commands.command(name="alerts-set-channel", description="Définir le salon des notifications pour une alerte")
