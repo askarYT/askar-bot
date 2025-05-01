@@ -55,7 +55,7 @@ class Alerts(commands.Cog):
 
             # Ajouter les rôles de notification pour chaque type de contenu
             for content_type, role_id in alert["notif_roles"].items():
-                role = await interaction.guild.get_role(role_id) if role_id else "Aucun rôle défini"
+                role = interaction.guild.get_role(role_id) if role_id else "Aucun rôle défini"
                 alert_message += f"  - Rôle pour `{content_type}` : {role}\n"
             
         # Afficher le message des alertes dans la réponse de l'interaction
@@ -78,15 +78,17 @@ class Alerts(commands.Cog):
         if alert:
             if content_type not in alert["types"]:
                 self.alerts_collection.update_one(
-                    {"_id": ObjectId(alert["_id"])}),
+                {"_id": ObjectId(alert["_id"])},
                 {"$push": {"types": content_type}}
-                
+            )
+
                 await interaction.response.send_message(f"✅ Contenu `{content_type}` ajouté pour {channel_identifier}.")
             else:
                 self.alerts_collection.update_one(
-                    {"_id": ObjectId(alert["_id"])}),
-                {"$pull": {"types": content_type}}
-                
+                {"_id": ObjectId(alert["_id"])},
+                {"$push": {"types": content_type}}
+            )
+
                 await interaction.response.send_message(f"❌ Contenu `{content_type}` retiré pour {channel_identifier}.")
         else:
             new_alert = {
