@@ -30,10 +30,10 @@ class Alerts(commands.Cog):
     @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     async def alert(self, interaction: discord.Interaction):
         # Récupérer toutes les alertes de la base de données
-        alerts = self.alerts_collection.find()
+        alerts = list(self.alerts_collection.find())  # Convertir le curseur en liste
 
         # Vérifier s'il y a des alertes
-        if alerts.count() == 0:
+        if len(alerts) == 0:
             await interaction.response.send_message("Aucune alerte enregistrée.")
             return
 
