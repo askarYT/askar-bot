@@ -55,7 +55,7 @@ class Alerts(commands.Cog):
 
             # Ajouter les rôles de notification pour chaque type de contenu
             for content_type, role_id in alert["notif_roles"].items():
-                role = await interaction.guild.fetch_role(role_id) if role_id else "Aucun rôle défini"
+                role = await interaction.guild.get_role(role_id) if role_id else "Aucun rôle défini"
                 alert_message += f"  - Rôle pour `{content_type}` : {role}\n"
             
         # Afficher le message des alertes dans la réponse de l'interaction
