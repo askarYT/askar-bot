@@ -27,11 +27,41 @@ class Alerts(commands.Cog):
     async def cog_check(self, ctx):
         return ctx.author.guild_permissions.administrator
 
-    @app_commands.command(name="alert", description="Gérer les alertes")
+    @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     async def alert(self, interaction: discord.Interaction):
-        await interaction.response.send_message("Sous-commandes : `add`, `set-role`, `set-channel`")
+        # Récupérer toutes les alertes de la base de données
+        alerts = self.alerts_collection.find()
 
-    @app_commands.command(name="add", description="Ajouter une alerte")
+        # Vérifier s'il y a des alertes
+        if alerts.count() == 0:
+            await interaction.response.send_message("Aucune alerte enregistrée.")
+            return
+
+        # Créer un message pour afficher les alertes
+        alert_message = "Liste des alertes inscrites :\n"
+        for alert in alerts:
+            # Récupérer l'ID de la chaîne (YouTube) ou le nom d'utilisateur Twitch
+            if alert.get("channel_id"):
+                platform = "YouTube"
+                channel_identifier = alert["channel_id"]
+            else:
+                platform = "Twitch"
+                channel_identifier = alert["twitch_username"]
+
+            # Construire le message avec les détails des alertes
+            content_types = ', '.join(alert["types"])  # Types de contenu (video, short, live, tiktok)
+            alert_message += f"\n**{platform}** : {channel_identifier}\n"
+            alert_message += f"  - Types de contenu : {content_types}\n"
+
+            # Ajouter les rôles de notification pour chaque type de contenu
+            for content_type, role_id in alert["notif_roles"].items():
+                role = await interaction.guild.fetch_role(role_id) if role_id else "Aucun rôle défini"
+                alert_message += f"  - Rôle pour `{content_type}` : {role}\n"
+            
+        # Afficher le message des alertes dans la réponse de l'interaction
+        await interaction.response.send_message(alert_message)
+
+    @app_commands.command(name="alerts-add", description="Ajouter une alerte")
     async def add_alert(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str):
         platform = platform.lower()
         content_type = content_type.lower()
@@ -75,7 +105,7 @@ class Alerts(commands.Cog):
             self.alerts_collection.insert_one(new_alert)
             await interaction.response.send_message(f"🎉 Nouvelle alerte créée pour {channel_identifier} ({content_type}).")
 
-    @app_commands.command(name="set-role", description="Définir un rôle pour une alerte")
+    @app_commands.command(name="alerts-set-role", description="Définir un rôle pour une alerte")
     async def set_role(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str, role: discord.Role):
         platform = platform.lower()
         content_type = content_type.lower()
@@ -95,7 +125,7 @@ class Alerts(commands.Cog):
         
         await interaction.response.send_message(f"🔔 Rôle pour `{content_type}` mis à jour.")
 
-    @app_commands.command(name="set-channel", description="Définir le salon des notifications pour une alerte")
+    @app_commands.command(name="alerts-set-channel", description="Définir le salon des notifications pour une alerte")
     async def set_channel(self, interaction: discord.Interaction, platform: str, channel_identifier: str, channel: discord.TextChannel):
         platform = platform.lower()
 
