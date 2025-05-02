@@ -4,6 +4,7 @@ from pymongo import MongoClient  # type: ignore
 import aiohttp
 import os
 from discord import app_commands
+from datetime import datetime
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -11,6 +12,10 @@ TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
 
 if not (YOUTUBE_API_KEY and TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET):
     raise ValueError("Clés API manquantes dans les variables d'environnement.")
+
+def log(message):
+    now = datetime.now().strftime("%d-%m-%Y | %H-%M-%S-%f")
+    print(f"[{now}] {message}")
 
 class Alerts(commands.Cog):
     def __init__(self, bot):
@@ -23,18 +28,22 @@ class Alerts(commands.Cog):
         self.twitch_live_notified = {}
         self.session = aiohttp.ClientSession()
         self.check_alerts.start()
+        log("Cog 'Alerts' initialisé.")
 
     def cog_unload(self):
         self.check_alerts.cancel()
         self.bot.loop.create_task(self.session.close())
+        log("Cog 'Alerts' déchargé.")
 
     @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     @app_commands.checks.has_permissions(administrator=True)
     async def alert(self, interaction: discord.Interaction):
+        log(f"Commande '/alerts' exécutée par {interaction.user}.")
         alerts = list(self.alerts_collection.find())
 
         if not alerts:
             await interaction.response.send_message("Aucune alerte enregistrée.")
+            log("Aucune alerte trouvée.")
             return
 
         alert_message = "Liste des alertes inscrites :\n"
@@ -55,12 +64,15 @@ class Alerts(commands.Cog):
     @app_commands.command(name="alerts-add", description="Ajouter une alerte")
     @app_commands.checks.has_permissions(administrator=True)
     async def add_alert(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str):
+        log(f"Commande '/alerts-add' exécutée par {interaction.user}.")
         platform = platform.lower()
         content_type = content_type.lower()
 
         if platform not in ["youtube", "twitch"]:
+            log(f"Plateforme invalide: {platform}")
             return await interaction.response.send_message("❌ Plateforme invalide (youtube ou twitch).")
         if content_type not in ["video", "short", "live", "tiktok"]:
+            log(f"Type de contenu invalide: {content_type}")
             return await interaction.response.send_message("❌ Type de contenu invalide.")
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
@@ -73,12 +85,14 @@ class Alerts(commands.Cog):
                     {"$push": {"types": content_type}}
                 )
                 await interaction.response.send_message(f"✅ Contenu `{content_type}` ajouté pour {channel_identifier}.")
+                log(f"Contenu `{content_type}` ajouté pour {channel_identifier}.")
             else:
                 self.alerts_collection.update_one(
                     {"_id": alert["_id"]},
                     {"$pull": {"types": content_type}}
                 )
                 await interaction.response.send_message(f"❌ Contenu `{content_type}` retiré pour {channel_identifier}.")
+                log(f"Contenu `{content_type}` retiré pour {channel_identifier}.")
         else:
             new_alert = {
                 "channel_id": channel_identifier if platform == "youtube" else None,
@@ -95,20 +109,24 @@ class Alerts(commands.Cog):
             }
             self.alerts_collection.insert_one(new_alert)
             await interaction.response.send_message(f"🎉 Nouvelle alerte créée pour {channel_identifier} ({content_type}).")
+            log(f"Nouvelle alerte créée pour {channel_identifier} ({content_type}).")
 
     @app_commands.command(name="alerts-set-role", description="Définir un rôle pour une alerte")
     @app_commands.checks.has_permissions(administrator=True)
     async def set_role(self, interaction: discord.Interaction, platform: str, channel_identifier: str, content_type: str, role: discord.Role):
+        log(f"Commande '/alerts-set-role' exécutée par {interaction.user}.")
         platform = platform.lower()
         content_type = content_type.lower()
 
         if content_type not in ["video", "short", "live", "tiktok"]:
+            log(f"Type invalide: {content_type}")
             return await interaction.response.send_message("❌ Type invalide.")
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
         alert = self.alerts_collection.find_one(query)
 
         if not alert:
+            log(f"Alerte non trouvée pour {channel_identifier}.")
             return await interaction.response.send_message("❌ Cette alerte n'existe pas.")
 
         self.alerts_collection.update_one(
@@ -117,16 +135,19 @@ class Alerts(commands.Cog):
         )
 
         await interaction.response.send_message(f"🔔 Rôle pour `{content_type}` mis à jour.")
+        log(f"Rôle pour `{content_type}` mis à jour pour {channel_identifier}.")
 
     @app_commands.command(name="alerts-set-channel", description="Définir le salon des notifications pour une alerte")
     @app_commands.checks.has_permissions(administrator=True)
     async def set_channel(self, interaction: discord.Interaction, platform: str, channel_identifier: str, channel: discord.TextChannel):
+        log(f"Commande '/alerts-set-channel' exécutée par {interaction.user}.")
         platform = platform.lower()
 
         query = {"channel_id" if platform == "youtube" else "twitch_username": channel_identifier}
         alert = self.alerts_collection.find_one(query)
 
         if not alert:
+            log(f"Alerte non trouvée pour {channel_identifier}.")
             return await interaction.response.send_message("❌ Cette alerte n'existe pas.")
 
         self.alerts_collection.update_one(
@@ -135,9 +156,11 @@ class Alerts(commands.Cog):
         )
 
         await interaction.response.send_message(f"📢 Salon de notification mis à jour.")
+        log(f"Salon de notification mis à jour pour {channel_identifier}.")
 
     @tasks.loop(minutes=5)
     async def check_alerts(self):
+        log("Vérification des alertes démarrée.")
         alerts = self.alerts_collection.find()
         for alert in alerts:
             try:
@@ -146,7 +169,7 @@ class Alerts(commands.Cog):
                 elif alert.get("twitch_username"):
                     await self.check_twitch(alert)
             except Exception as e:
-                print(f"[Erreur] Échec lors du check d'une alerte : {e}")
+                log(f"[Erreur] Échec lors du check d'une alerte : {e}")
 
     async def check_youtube(self, alert):
         channel_id = alert["channel_id"]
@@ -162,11 +185,11 @@ class Alerts(commands.Cog):
             "&maxResults=1"
             "&type=video"
         )
-        print(f"URL YouTube : {url}")
+        log(f"URL YouTube : {url}")
 
         async with self.session.get(url) as resp:
             if resp.status != 200:
-                print(f"[YouTube] Erreur API: {resp.status}")
+                log(f"[YouTube] Erreur API: {resp.status}")
                 return
             data = await resp.json()
 
@@ -209,7 +232,7 @@ class Alerts(commands.Cog):
         role_mention = f"<@&{role_id}>" if role_id else ""
 
         await channel.send(f"{role_mention} Nouvelle {'Short' if is_short else 'Vidéo'} !\n{video_title}\n{video_url}")
-        print(f"[YouTube] Nouvelle {'Short' if is_short else 'Vidéo'} détectée : {video_title}")
+        log(f"[YouTube] Nouvelle {'Short' if is_short else 'Vidéo'} détectée : {video_title}")
 
     async def check_twitch(self, alert):
         if not self.twitch_access_token:
@@ -243,7 +266,7 @@ class Alerts(commands.Cog):
             role_mention = f"<@&{role_id}>" if role_id else ""
 
             await channel.send(f"{role_mention} **{username} est en LIVE !** 🎥\nhttps://twitch.tv/{username}")
-            print(f"[Twitch] {username} vient de lancer un live.")
+            log(f"[Twitch] {username} vient de lancer un live.")
         else:
             self.twitch_live_notified[username] = False
 
@@ -252,7 +275,7 @@ class Alerts(commands.Cog):
         async with self.session.post(url) as response:
             data = await response.json()
             self.twitch_access_token = data["access_token"]
-            print("[Twitch] Nouveau token d'accès récupéré.")
+            log("[Twitch] Nouveau token d'accès récupéré.")
 
 async def setup(bot):
     await bot.add_cog(Alerts(bot))
