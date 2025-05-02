@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-from pymongo import MongoClient
+from pymongo import MongoClient #type: ignore
 import aiohttp
 import os
 from discord import app_commands
