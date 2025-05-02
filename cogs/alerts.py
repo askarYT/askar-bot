@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-from pymongo import MongoClient # type: ignore
+from pymongo import MongoClient  # type: ignore
 import aiohttp
 import os
 import feedparser
@@ -163,12 +163,21 @@ class Alerts(commands.Cog):
         video_title = latest_entry.title
         video_url = latest_entry.link
 
-        if self.youtube_last_video.get(channel_id) == video_id:
+        # NE NOTIFIE PAS AU DEMARRAGE - stocke sans envoyer
+        if channel_id not in self.youtube_last_video:
+            self.youtube_last_video[channel_id] = video_id
+            return  # On initialise, pas d'envoi
+
+        # PAS NOUVELLE VIDEO
+        if self.youtube_last_video[channel_id] == video_id:
             return
+
+        # MàJ de la dernière vidéo vue
         self.youtube_last_video[channel_id] = video_id
 
         is_short = "shorts" in video_url.lower()
 
+        # SI le type n'est pas activé, on annule
         if (is_short and "short" not in types) or (not is_short and "video" not in types):
             return
 
