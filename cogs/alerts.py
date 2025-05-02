@@ -1,8 +1,9 @@
 import discord
 from discord.ext import commands, tasks
-from pymongo import MongoClient #type: ignore
+from pymongo import MongoClient # type: ignore
 import aiohttp
 import os
+import feedparser
 from discord import app_commands
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
@@ -20,28 +21,27 @@ class Alerts(commands.Cog):
         self.alerts_collection = self.db["alerts"]
         self.youtube_last_video = {}
         self.twitch_access_token = None
+        self.twitch_live_notified = {}
+        self.session = aiohttp.ClientSession()
         self.check_alerts.start()
 
     def cog_unload(self):
         self.check_alerts.cancel()
+        self.bot.loop.create_task(self.session.close())
 
     @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     @app_commands.checks.has_permissions(administrator=True)
     async def alert(self, interaction: discord.Interaction):
         alerts = list(self.alerts_collection.find())
 
-        if len(alerts) == 0:
+        if not alerts:
             await interaction.response.send_message("Aucune alerte enregistrée.")
             return
 
         alert_message = "Liste des alertes inscrites :\n"
         for alert in alerts:
-            if alert.get("channel_id"):
-                platform = "YouTube"
-                channel_identifier = alert["channel_id"]
-            else:
-                platform = "Twitch"
-                channel_identifier = alert["twitch_username"]
+            platform = "YouTube" if alert.get("channel_id") else "Twitch"
+            channel_identifier = alert.get("channel_id") or alert.get("twitch_username")
 
             content_types = ', '.join(alert["types"])
             alert_message += f"\n**{platform}** : {channel_identifier}\n"
@@ -61,7 +61,6 @@ class Alerts(commands.Cog):
 
         if platform not in ["youtube", "twitch"]:
             return await interaction.response.send_message("❌ Plateforme invalide (youtube ou twitch).")
-
         if content_type not in ["video", "short", "live", "tiktok"]:
             return await interaction.response.send_message("❌ Type de contenu invalide.")
 
@@ -141,39 +140,34 @@ class Alerts(commands.Cog):
     @tasks.loop(minutes=5)
     async def check_alerts(self):
         alerts = self.alerts_collection.find()
-
         for alert in alerts:
-            if alert.get("channel_id"):
-                await self.check_youtube(alert)
-            elif alert.get("twitch_username"):
-                await self.check_twitch(alert)
+            try:
+                if alert.get("channel_id"):
+                    await self.check_youtube(alert)
+                elif alert.get("twitch_username"):
+                    await self.check_twitch(alert)
+            except Exception as e:
+                print(f"[Erreur] Échec lors du check d'une alerte : {e}")
 
     async def check_youtube(self, alert):
         channel_id = alert["channel_id"]
         types = alert["types"]
-        url = f"https://www.googleapis.com/youtube/v3/search?key={YOUTUBE_API_KEY}&channelId={channel_id}&part=snippet,id&order=date&maxResults=1"
+        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                data = await response.json()
-
-        if "items" not in data or not data["items"]:
+        parsed_feed = feedparser.parse(feed_url)
+        if not parsed_feed.entries:
             return
 
-        latest = data["items"][0]
-        video_id = latest["id"].get("videoId")
-        if not video_id:
-            return
+        latest_entry = parsed_feed.entries[0]
+        video_id = latest_entry.yt_videoid
+        video_title = latest_entry.title
+        video_url = latest_entry.link
 
         if self.youtube_last_video.get(channel_id) == video_id:
             return
         self.youtube_last_video[channel_id] = video_id
 
-        video_title = latest["snippet"]["title"]
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        # NOTE: Cette détection est approximative car YouTube n'indique pas directement les Shorts via l'API Search
-        is_short = "shorts" in video_title.lower()
+        is_short = "shorts" in video_url.lower()
 
         if (is_short and "short" not in types) or (not is_short and "video" not in types):
             return
@@ -190,6 +184,7 @@ class Alerts(commands.Cog):
         role_mention = f"<@&{role_id}>" if role_id else ""
 
         await channel.send(f"{role_mention} Nouvelle {'Short' if is_short else 'Vidéo'} !\n{video_title}\n{video_url}")
+        print(f"[YouTube] Nouvelle {'Short' if is_short else 'Vidéo'} détectée : {video_title}")
 
     async def check_twitch(self, alert):
         if not self.twitch_access_token:
@@ -202,13 +197,10 @@ class Alerts(commands.Cog):
         }
         url = f"https://api.twitch.tv/helix/streams?user_login={username}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                data = await response.json()
+        async with self.session.get(url, headers=headers) as response:
+            data = await response.json()
 
-        if not data.get("data"):
-            return
-
+        is_live = bool(data.get("data"))
         target_channel_id = alert.get("target_channel_id")
         if not target_channel_id:
             return
@@ -217,17 +209,25 @@ class Alerts(commands.Cog):
         if not channel or not isinstance(channel, discord.TextChannel):
             return
 
-        role_id = alert.get("notif_roles", {}).get("live")
-        role_mention = f"<@&{role_id}>" if role_id else ""
+        if is_live:
+            if self.twitch_live_notified.get(username):
+                return
+            self.twitch_live_notified[username] = True
 
-        await channel.send(f"{role_mention} **{username} est en LIVE !** 🎥\nhttps://twitch.tv/{username}")
+            role_id = alert.get("notif_roles", {}).get("live")
+            role_mention = f"<@&{role_id}>" if role_id else ""
+
+            await channel.send(f"{role_mention} **{username} est en LIVE !** 🎥\nhttps://twitch.tv/{username}")
+            print(f"[Twitch] {username} vient de lancer un live.")
+        else:
+            self.twitch_live_notified[username] = False
 
     async def refresh_twitch_token(self):
         url = f"https://id.twitch.tv/oauth2/token?client_id={TWITCH_CLIENT_ID}&client_secret={TWITCH_CLIENT_SECRET}&grant_type=client_credentials"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url) as response:
-                data = await response.json()
-                self.twitch_access_token = data["access_token"]
+        async with self.session.post(url) as response:
+            data = await response.json()
+            self.twitch_access_token = data["access_token"]
+            print("[Twitch] Nouveau token d'accès récupéré.")
 
 async def setup(bot):
     await bot.add_cog(Alerts(bot))
