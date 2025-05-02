@@ -40,10 +40,10 @@ class Alerts(commands.Cog):
         self.check_alerts.start()
         log("Cog 'Alerts' initialisé.", self.bot)
 
-    """def cog_unload(self):
+    def cog_unload(self):
         self.check_alerts.cancel()
         self.bot.loop.create_task(self.session.close())
-        log("Cog 'Alerts' déchargé.", self.bot)"""
+        log("Cog 'Alerts' déchargé.", self.bot)
 
     @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     @app_commands.checks.has_permissions(administrator=True)
