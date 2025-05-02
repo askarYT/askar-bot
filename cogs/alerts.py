@@ -3,7 +3,6 @@ from discord.ext import commands, tasks
 from pymongo import MongoClient  # type: ignore
 import aiohttp
 import os
-import feedparser
 from discord import app_commands
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
@@ -152,16 +151,32 @@ class Alerts(commands.Cog):
     async def check_youtube(self, alert):
         channel_id = alert["channel_id"]
         types = alert["types"]
-        feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 
-        parsed_feed = feedparser.parse(feed_url)
-        if not parsed_feed.entries:
+        # Appel API YouTube pour récupérer la dernière vidéo
+        url = (
+            "https://youtube.googleapis.com/youtube/v3/search"
+            f"?key={YOUTUBE_API_KEY}"
+            f"&channelId={channel_id}"
+            "&part=snippet"
+            "&order=date"
+            "&maxResults=1"
+            "&type=video"
+        )
+
+        async with self.session.get(url) as resp:
+            if resp.status != 200:
+                print(f"[YouTube] Erreur API: {resp.status}")
+                return
+            data = await resp.json()
+
+        items = data.get("items")
+        if not items:
             return
 
-        latest_entry = parsed_feed.entries[0]
-        video_id = latest_entry.yt_videoid
-        video_title = latest_entry.title
-        video_url = latest_entry.link
+        video = items[0]
+        video_id = video["id"]["videoId"]
+        video_title = video["snippet"]["title"]
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         # NE NOTIFIE PAS AU DEMARRAGE - stocke sans envoyer
         if channel_id not in self.youtube_last_video:
