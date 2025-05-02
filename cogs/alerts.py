@@ -162,6 +162,7 @@ class Alerts(commands.Cog):
             "&maxResults=1"
             "&type=video"
         )
+        print(f"URL YouTube : {url}")
 
         async with self.session.get(url) as resp:
             if resp.status != 200:
