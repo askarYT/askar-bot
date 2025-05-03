@@ -4,7 +4,7 @@ from pymongo import MongoClient  # type: ignore
 import aiohttp
 import os
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, timedelta
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -19,7 +19,6 @@ def log(message, bot=None):
     now = datetime.now().strftime("%d-%m-%Y | %H-%M-%S-%f")
     formatted_message = f"[{now}] {message}"
 
-    # Si un bot est passé en paramètre, envoie le log dans le salon Discord
     if bot:
         channel = bot.get_channel(LOG_CHANNEL_ID)
         if channel:
@@ -34,6 +33,7 @@ class Alerts(commands.Cog):
         self.db = self.client["askar_bot"]
         self.alerts_collection = self.db["alerts"]
         self.youtube_last_video = {}
+        self.youtube_notif_times = {}  # <<<< Ajout pour anti-flood
         self.twitch_access_token = None
         self.twitch_live_notified = {}
         self.session = aiohttp.ClientSession()
@@ -185,7 +185,6 @@ class Alerts(commands.Cog):
         channel_id = alert["channel_id"]
         types = alert["types"]
 
-        # Appel API YouTube pour récupérer la dernière vidéo
         url = (
             "https://youtube.googleapis.com/youtube/v3/search"
             f"?key={YOUTUBE_API_KEY}"
@@ -212,21 +211,25 @@ class Alerts(commands.Cog):
         video_title = video["snippet"]["title"]
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        # NE NOTIFIE PAS AU DEMARRAGE - stocke sans envoyer
+        now = datetime.now(datetime.timezone.utc)
+
         if channel_id not in self.youtube_last_video:
             self.youtube_last_video[channel_id] = video_id
-            return  # On initialise, pas d'envoi
-
-        # PAS NOUVELLE VIDEO
-        if self.youtube_last_video[channel_id] == video_id:
+            self.youtube_notif_times[channel_id] = now
             return
 
-        # MàJ de la dernière vidéo vue
+        if self.youtube_last_video[channel_id] == video_id:
+            # Vérification Anti-Flood
+            last_notif_time = self.youtube_notif_times.get(channel_id)
+            if last_notif_time and (now - last_notif_time) < timedelta(minutes=10):
+                log(f"[YouTube] Vidéo déjà notifiée récemment pour {channel_id}.", self.bot)
+                return
+
         self.youtube_last_video[channel_id] = video_id
+        self.youtube_notif_times[channel_id] = now
 
         is_short = "shorts" in video_url.lower()
 
-        # SI le type n'est pas activé, on annule
         if (is_short and "short" not in types) or (not is_short and "video" not in types):
             return
 
