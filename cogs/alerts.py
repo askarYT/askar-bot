@@ -168,7 +168,7 @@ class Alerts(commands.Cog):
         await interaction.response.send_message(f"📢 Salon de notification mis à jour.")
         log(f"Salon de notification mis à jour pour {channel_identifier}.", self.bot)
 
-    @tasks.loop(minutes=1)
+    @tasks.loop(minutes=5)
     async def check_alerts(self):
         log("Vérification des alertes démarrée.", self.bot)
         alerts = self.alerts_collection.find()
