@@ -25,40 +25,51 @@ class YouTubeNotifier(commands.Cog):
         for doc in collection.find():
             youtube_channel_id = doc["_id"]
             channel_name = doc["channel_name"]
-            latest_url = doc.get("latest_video_url", "none")
+            latest_video_url_stored = doc.get("latest_video_url", "none")
+            latest_short_url_stored = doc.get("latest_short_url", "none")  # ✅ nouvel attribut
             discord_channel_id = doc["notifying_discord_channel"]
             video_role_id = doc.get("video_role_id")
             short_role_id = doc.get("short_role_id")
 
-            print(f"Now Checking For {channel_name}")
-            channel_url = f"https://www.youtube.com/channel/{youtube_channel_id}"
-            html = requests.get(channel_url + "/videos").text
-
-            try:
-                latest_video_url = "https://www.youtube.com/watch?v=" + re.search('(?<="videoId":").*?(?=")', html).group()
-            except:
+            discord_channel = self.bot.get_channel(int(discord_channel_id))
+            if not discord_channel:
+                print(f"⚠️ Canal Discord introuvable : {discord_channel_id}")
                 continue
 
-            if latest_url != latest_video_url:
+            # Vérification des vidéos classiques
+            print(f"🔍 Checking Videos for {channel_name}")
+            video_html = requests.get(f"https://www.youtube.com/channel/{youtube_channel_id}/videos").text
+            try:
+                latest_video_id = re.search('(?<="videoId":").*?(?=")', video_html).group()
+                latest_video_url = f"https://www.youtube.com/watch?v={latest_video_id}"
+            except:
+                latest_video_url = None
+
+            if latest_video_url and latest_video_url != latest_video_url_stored:
                 collection.update_one(
                     {"_id": youtube_channel_id},
                     {"$set": {"latest_video_url": latest_video_url}}
                 )
+                role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
+                msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}"
+                await discord_channel.send(msg)
 
-                discord_channel = self.bot.get_channel(int(discord_channel_id))
-                if not discord_channel:
-                    print(f"⚠️ Canal Discord introuvable : {discord_channel_id}")
-                    continue
+            # ✅ Vérification des Shorts
+            print(f"🔍 Checking Shorts for {channel_name}")
+            shorts_html = requests.get(f"https://www.youtube.com/channel/{youtube_channel_id}/shorts").text
+            try:
+                latest_short_id = re.search('(?<="videoId":").*?(?=")', shorts_html).group()
+                latest_short_url = f"https://www.youtube.com/shorts/{latest_short_id}"
+            except:
+                latest_short_url = None
 
-                is_short = "/shorts/" in latest_video_url
-
-                if is_short:
-                    role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
-                    msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{latest_video_url}"
-                else:
-                    role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
-                    msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}"
-
+            if latest_short_url and latest_short_url != latest_short_url_stored:
+                collection.update_one(
+                    {"_id": youtube_channel_id},
+                    {"$set": {"latest_short_url": latest_short_url}}
+                )
+                role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
+                msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{latest_short_url}"
                 await discord_channel.send(msg)
 
     @app_commands.command(name="add_youtube_notification_data", description="Ajoute une chaîne YouTube à surveiller.")
@@ -73,6 +84,7 @@ class YouTubeNotifier(commands.Cog):
             "_id": channel_id,
             "channel_name": channel_name,
             "latest_video_url": "none",
+            "latest_short_url": "none",  # ✅ initialisation
             "notifying_discord_channel": "1367923588786552862",
             "video_role_id": None,
             "short_role_id": None
