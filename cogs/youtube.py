@@ -3,7 +3,9 @@ import requests
 import re
 import os
 
+import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 from pymongo import MongoClient
 
 # Connexion à MongoDB
@@ -45,23 +47,30 @@ class YouTubeNotifier(commands.Cog):
                 msg = f"@everyone {channel_name} a sorti une nouvelle vidéo ou est en live : {latest_video_url}"
                 await discord_channel.send(msg)
 
-    @commands.command()
-    async def add_youtube_notification_data(self, ctx, channel_id: str, *, channel_name: str):
+    @app_commands.command(name="add_youtube_notification_data", description="Ajoute une chaîne YouTube à surveiller.")
+    async def add_youtube_notification_data(self, interaction: discord.Interaction, channel_id: str, channel_name: str):
         existing = collection.find_one({"_id": channel_id})
 
         if existing:
-            await ctx.send("Cette chaîne est déjà suivie.")
+            await interaction.response.send_message("❌ Cette chaîne est déjà suivie.", ephemeral=True)
             return
 
         data = {
             "_id": channel_id,
             "channel_name": channel_name,
             "latest_video_url": "none",
-            "notifying_discord_channel": "1367923588786552862"  # à adapter si nécessaire
+            "notifying_discord_channel": str(interaction.channel_id)  # utilise le canal courant
         }
 
         collection.insert_one(data)
-        await ctx.send("Chaîne ajoutée à la base de données MongoDB !")
+        await interaction.response.send_message("✅ Chaîne ajoutée à la base de données MongoDB !", ephemeral=True)
+
+    async def cog_load(self):
+        self.bot.tree.add_command(self.add_youtube_notification_data)
+
+    async def cog_unload(self):
+        self.bot.tree.remove_command(self.add_youtube_notification_data.name, type=self.add_youtube_notification_data.type)
+        self.checkforvideos.cancel()
 
 # Fonction pour ajouter le COG
 async def setup(bot):
