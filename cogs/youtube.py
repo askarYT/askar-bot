@@ -73,7 +73,7 @@ class YouTubeNotifier(commands.Cog):
             "_id": channel_id,
             "channel_name": channel_name,
             "latest_video_url": "none",
-            "notifying_discord_channel": str(interaction.channel_id),
+            "notifying_discord_channel": "1367923588786552862",
             "video_role_id": None,
             "short_role_id": None
         }
