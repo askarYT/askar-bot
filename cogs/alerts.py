@@ -1,31 +1,18 @@
 import discord
-from discord.ext import commands, tasks
-from pymongo import MongoClient  # type: ignore
-import aiohttp
 import os
+import re
+import json
+import requests # type: ignore
 from discord import app_commands
+from discord.ext import commands, tasks
+from discord.utils import get
+from pymongo import MongoClient  # type: ignore
+from twitchAPI.twitch import Twitch # type: ignore
+
+import aiohttp
 from datetime import datetime, timedelta
 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
-TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
-TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
-
-if not (YOUTUBE_API_KEY and TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET):
-    raise ValueError("Clés API manquantes dans les variables d'environnement.")
-
-LOG_CHANNEL_ID = 1367923588786552862  # Remplace par l'ID du salon de logs Discord
-
-def log(message, bot=None):
-    now = datetime.now().strftime("%d-%m-%Y | %H-%M-%S-%f")
-    formatted_message = f"[{now}] {message}"
-
-    if bot:
-        channel = bot.get_channel(LOG_CHANNEL_ID)
-        if channel:
-            bot.loop.create_task(channel.send(formatted_message))
-    else:
-        print(formatted_message)
-
+# 
 class Alerts(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -40,10 +27,37 @@ class Alerts(commands.Cog):
         self.check_alerts.start()
         log("Cog 'Alerts' initialisé.", self.bot)
 
-    def cog_unload(self):
-        self.check_alerts.cancel()
-        self.bot.loop.create_task(self.session.close())
-        log("Cog 'Alerts' déchargé.", self.bot)
+
+# Initialisation des logs
+LOG_CHANNEL_ID = 1367923588786552862  # Remplace par l'ID du salon de logs Discord
+
+def log(message, bot=None):
+    now = datetime.now().strftime("%d-%m-%Y | %H-%M-%S-%f")
+    formatted_message = f"[{now}] {message}"
+
+    if bot:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if channel:
+            bot.loop.create_task(channel.send(formatted_message))
+    else:
+        print(formatted_message)
+
+# Identification des API
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
+TWITCH_CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
+TWITCH_CLIENT_SECRET = os.getenv("TWITCH_CLIENT_SECRET")
+
+# Identification de Twitch
+twitch = Twitch(TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET)
+twitch.authenticate_app([])
+TWITCH_STREAM_API_ENDPOINT_V5 = "https://api.twitch.tv/kraken/streams/{}"
+API_HEADERS = {
+    'Client-ID': TWITCH_CLIENT_ID,
+    'Accept': 'application/vnd.twitchtv.v5+json',
+}
+
+if not (YOUTUBE_API_KEY and TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET):
+    log("Clés API manquantes dans les variables d'environnement.", self.bot)
 
     @app_commands.command(name="alerts", description="Afficher les alertes et les utilisateurs inscrits")
     @app_commands.checks.has_permissions(administrator=True)
@@ -167,7 +181,8 @@ class Alerts(commands.Cog):
 
         await interaction.response.send_message(f"📢 Salon de notification mis à jour.")
         log(f"Salon de notification mis à jour pour {channel_identifier}.", self.bot)
-
+    
+    """""
     @tasks.loop(minutes=5)
     async def check_alerts(self):
         log("Vérification des alertes démarrée.", self.bot)
@@ -181,7 +196,8 @@ class Alerts(commands.Cog):
             except Exception as e:
                 log(f"[Erreur] Échec lors du check d'une alerte : {e}", self.bot)
 
-    async def check_youtube(self, alert):
+    
+    def check_youtube(self, alert):
         channel_id = alert["channel_id"]
         types = alert["types"]
 
@@ -246,7 +262,8 @@ class Alerts(commands.Cog):
 
         await channel.send(f"{role_mention} Nouvelle {'Short' if is_short else 'Vidéo'} !\n{video_title}\n{video_url}")
         log(f"[YouTube] Nouvelle {'Short' if is_short else 'Vidéo'} détectée : {video_title}", self.bot)
-
+    """""
+    """""
     async def check_twitch(self, alert):
         if not self.twitch_access_token:
             await self.refresh_twitch_token()
@@ -289,6 +306,8 @@ class Alerts(commands.Cog):
             data = await response.json()
             self.twitch_access_token = data["access_token"]
             log("[Twitch] Nouveau token d'accès récupéré.", self.bot)
+    """""
+
 
 async def setup(bot):
     await bot.add_cog(Alerts(bot))
