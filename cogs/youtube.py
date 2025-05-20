@@ -50,8 +50,8 @@ class YouTubeNotifier(commands.Cog):
                     {"_id": youtube_channel_id},
                     {"$set": {"latest_video_url": latest_video_url}}
                 )
-                role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
-                msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}"
+                role_mention = f"<@&{video_role_id}>" if video_role_id else "@NOMENTION"
+                msg = f"**{channel_name}** a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}\n-#{role_mention}"
                 await discord_channel.send(msg)
 
             # ✅ Vérification des Shorts
@@ -68,8 +68,8 @@ class YouTubeNotifier(commands.Cog):
                     {"_id": youtube_channel_id},
                     {"$set": {"latest_short_url": latest_short_url}}
                 )
-                role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
-                msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{latest_short_url}"
+                role_mention = f"<@&{short_role_id}>" if short_role_id else "@NOMENTION"
+                msg = f"**{channel_name}** a publié un nouveau **Short** ! 🎬\n{latest_short_url}\n-#{role_mention}"
                 await discord_channel.send(msg)
 
     @app_commands.command(name="set_alert", description="Ajoute une chaîne YouTube à surveiller.")
@@ -97,20 +97,9 @@ class YouTubeNotifier(commands.Cog):
             ephemeral=True
         )
 
-    @app_commands.command(name="set_alert_roles", description="Définit les rôles à mentionner pour une chaîne.")
-    async def set_alert_roles(
-        self,
-        interaction: discord.Interaction,
-        channel_name: str,
-        video_role: discord.Role = None,
-        short_role: discord.Role = None,
-        twitch_role: discord.Role = None
-    ):
-        result = collection.find_one({"channel_name": channel_name})
-        if not result:
-            await interaction.response.send_message("❌ Chaîne non trouvée dans la base de données.", ephemeral=True)
-            return
 
+    @app_commands.command(name="set_alert_roles", description="Définit les rôles globaux à mentionner pour toutes les chaînes.")
+    async def set_alert_roles(self, interaction: discord.Interaction, video_role: discord.Role = None, short_role: discord.Role = None, twitch_role: discord.Role = None):
         update_data = {}
         if video_role:
             update_data["video_role_id"] = str(video_role.id)
@@ -120,10 +109,15 @@ class YouTubeNotifier(commands.Cog):
             update_data["twitch_role_id"] = str(twitch_role.id)
 
         if update_data:
-            collection.update_one({"_id": result["_id"]}, {"$set": update_data})
-            await interaction.response.send_message("✅ Rôles mis à jour avec succès.", ephemeral=True)
+            collection.update_one(
+                {"_id": "default_roles"},
+                {"$set": update_data},
+                upsert=True
+            )
+            await interaction.response.send_message("✅ Rôles par défaut définis avec succès pour toutes les chaînes.", ephemeral=True)
         else:
-            await interaction.response.send_message("⚠️ Aucun rôle fourni à mettre à jour.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Aucun rôle fourni.", ephemeral=True)
+
 
     @app_commands.command(name="remove_alert", description="Supprime une alerte YouTube par nom de chaîne.")
     @app_commands.describe(channel_name="Nom exact de la chaîne à retirer")
