@@ -22,11 +22,16 @@ class YouTubeNotifier(commands.Cog):
     async def checkforvideos(self):
         print("Now Checking!")
 
-        for doc in collection.find():
+        # Récupère les rôles par défaut s'ils existent
+        default_roles = collection.find_one({"_id": "default_roles"})
+        default_video_role_id = default_roles.get("video_role_id") if default_roles else None
+        default_short_role_id = default_roles.get("short_role_id") if default_roles else None
+
+        for doc in collection.find({"_id": {"$ne": "default_roles"}}):  # Exclut la doc des rôles par défaut
             youtube_channel_id = doc["_id"]
             channel_name = doc["channel_name"]
             latest_video_url_stored = doc.get("latest_video_url", "none")
-            latest_short_url_stored = doc.get("latest_short_url", "none")  # ✅ nouvel attribut
+            latest_short_url_stored = doc.get("latest_short_url", "none")
             discord_channel_id = doc["notifying_discord_channel"]
             video_role_id = doc.get("video_role_id")
             short_role_id = doc.get("short_role_id")
@@ -36,7 +41,7 @@ class YouTubeNotifier(commands.Cog):
                 print(f"⚠️ Canal Discord introuvable : {discord_channel_id}")
                 continue
 
-            # Vérification des vidéos classiques
+            # 🔍 Vérification des vidéos classiques
             print(f"🔍 Checking Videos for {channel_name}")
             video_html = requests.get(f"https://www.youtube.com/channel/{youtube_channel_id}/videos").text
             try:
@@ -51,10 +56,17 @@ class YouTubeNotifier(commands.Cog):
                     {"$set": {"latest_video_url": latest_video_url}}
                 )
                 role_mention = f"<@&{video_role_id}>" if video_role_id else "@NOMENTION"
-                msg = f"**{channel_name}** a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}\n-#{role_mention}"
-                await discord_channel.send(msg)
+                msg = f"**{channel_name}** a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}\n-# {role_mention}"
+                message = await discord_channel.send(msg)
 
-            # ✅ Vérification des Shorts
+                # 💬 Publie automatiquement si c’est un salon d’annonce
+                if isinstance(discord_channel, discord.TextChannel) and discord_channel.is_news():
+                    try:
+                        await message.publish()
+                    except discord.Forbidden:
+                        print(f"⚠️ Impossible de publier le message dans le salon d'annonce {discord_channel.name}")
+
+            # 🔍 Vérification des Shorts
             print(f"🔍 Checking Shorts for {channel_name}")
             shorts_html = requests.get(f"https://www.youtube.com/channel/{youtube_channel_id}/shorts").text
             try:
@@ -69,8 +81,15 @@ class YouTubeNotifier(commands.Cog):
                     {"$set": {"latest_short_url": latest_short_url}}
                 )
                 role_mention = f"<@&{short_role_id}>" if short_role_id else "@NOMENTION"
-                msg = f"**{channel_name}** a publié un nouveau **Short** ! 🎬\n{latest_short_url}\n-#{role_mention}"
-                await discord_channel.send(msg)
+                msg = f"**{channel_name}** a publié un nouveau **Short** ! 🎬\n{latest_short_url}\n-# {role_mention}"
+                message = await discord_channel.send(msg)
+
+                # 💬 Publie automatiquement si c’est un salon d’annonce
+                if isinstance(discord_channel, discord.TextChannel) and discord_channel.is_news():
+                    try:
+                        await message.publish()
+                    except discord.Forbidden:
+                        print(f"⚠️ Impossible de publier le message dans le salon d'annonce {discord_channel.name}")
 
     @app_commands.command(name="set_alert", description="Ajoute une chaîne YouTube à surveiller.")
     async def set_alert(self, interaction: discord.Interaction, channel_id: str, channel_name: str, notif_channel: discord.TextChannel):
