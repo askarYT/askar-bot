@@ -65,13 +65,6 @@ class YouTubeNotifier(commands.Cog):
         collection.insert_one(data)
         await interaction.response.send_message("✅ Chaîne ajoutée à la base de données MongoDB !", ephemeral=True)
 
-    async def cog_load(self):
-        self.bot.tree.add_command(self.add_youtube_notification_data)
-
-    async def cog_unload(self):
-        self.bot.tree.remove_command(self.add_youtube_notification_data.name, type=self.add_youtube_notification_data.type)
-        self.checkforvideos.cancel()
-
 # Fonction pour ajouter le COG
 async def setup(bot):
     await bot.add_cog(YouTubeNotifier(bot))
