@@ -73,7 +73,7 @@ class YouTubeNotifier(commands.Cog):
                 await discord_channel.send(msg)
 
     @app_commands.command(name="set_alert", description="Ajoute une chaîne YouTube à surveiller.")
-    async def set_alert(self, interaction: discord.Interaction, channel_id: str, channel_name: str):
+    async def set_alert(self, interaction: discord.Interaction, channel_id: str, channel_name: str, notif_channel: discord.TextChannel):
         existing = collection.find_one({"_id": channel_id})
 
         if existing:
@@ -85,14 +85,17 @@ class YouTubeNotifier(commands.Cog):
             "channel_name": channel_name,
             "latest_video_url": "none",
             "latest_short_url": "none",
-            "notifying_discord_channel": str(interaction.channel.id),
+            "notifying_discord_channel": str(notif_channel.id),  # ✅ Utilisation du salon défini
             "video_role_id": None,
             "short_role_id": None,
             "twitch_role_id": None
         }
 
         collection.insert_one(data)
-        await interaction.response.send_message("✅ Chaîne ajoutée à la base de données MongoDB !", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Chaîne **{channel_name}** ajoutée à la base de données ! Les notifications seront envoyées dans {notif_channel.mention}.",
+            ephemeral=True
+        )
 
     @app_commands.command(name="set_alert_roles", description="Définit les rôles à mentionner pour une chaîne.")
     async def set_alert_roles(
