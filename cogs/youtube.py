@@ -72,8 +72,8 @@ class YouTubeNotifier(commands.Cog):
                 msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{latest_short_url}"
                 await discord_channel.send(msg)
 
-    @app_commands.command(name="add_youtube_notification_data", description="Ajoute une chaîne YouTube à surveiller.")
-    async def add_youtube_notification_data(self, interaction: discord.Interaction, channel_id: str, channel_name: str):
+    @app_commands.command(name="set_alert", description="Ajoute une chaîne YouTube à surveiller.")
+    async def set_alert(self, interaction: discord.Interaction, channel_id: str, channel_name: str):
         existing = collection.find_one({"_id": channel_id})
 
         if existing:
@@ -84,18 +84,26 @@ class YouTubeNotifier(commands.Cog):
             "_id": channel_id,
             "channel_name": channel_name,
             "latest_video_url": "none",
-            "latest_short_url": "none",  # ✅ initialisation
-            "notifying_discord_channel": "1367923588786552862",
+            "latest_short_url": "none",
+            "notifying_discord_channel": str(interaction.channel.id),
             "video_role_id": None,
-            "short_role_id": None
+            "short_role_id": None,
+            "twitch_role_id": None
         }
 
         collection.insert_one(data)
         await interaction.response.send_message("✅ Chaîne ajoutée à la base de données MongoDB !", ephemeral=True)
 
-    @app_commands.command(name="set_youtube_roles", description="Définit les rôles à mentionner pour les vidéos et les shorts.")
-    async def set_youtube_roles(self, interaction: discord.Interaction, channel_id: str, video_role: discord.Role = None, short_role: discord.Role = None):
-        result = collection.find_one({"_id": channel_id})
+    @app_commands.command(name="set_alert_roles", description="Définit les rôles à mentionner pour une chaîne.")
+    async def set_alert_roles(
+        self,
+        interaction: discord.Interaction,
+        channel_name: str,
+        video_role: discord.Role = None,
+        short_role: discord.Role = None,
+        twitch_role: discord.Role = None
+    ):
+        result = collection.find_one({"channel_name": channel_name})
         if not result:
             await interaction.response.send_message("❌ Chaîne non trouvée dans la base de données.", ephemeral=True)
             return
@@ -105,12 +113,30 @@ class YouTubeNotifier(commands.Cog):
             update_data["video_role_id"] = str(video_role.id)
         if short_role:
             update_data["short_role_id"] = str(short_role.id)
+        if twitch_role:
+            update_data["twitch_role_id"] = str(twitch_role.id)
 
         if update_data:
-            collection.update_one({"_id": channel_id}, {"$set": update_data})
+            collection.update_one({"_id": result["_id"]}, {"$set": update_data})
             await interaction.response.send_message("✅ Rôles mis à jour avec succès.", ephemeral=True)
         else:
             await interaction.response.send_message("⚠️ Aucun rôle fourni à mettre à jour.", ephemeral=True)
+
+    @app_commands.command(name="remove_alert", description="Supprime une alerte YouTube par nom de chaîne.")
+    @app_commands.describe(channel_name="Nom exact de la chaîne à retirer")
+    async def remove_alert(self, interaction: discord.Interaction, channel_name: str):
+        result = collection.find_one({"channel_name": channel_name})
+        if not result:
+            await interaction.response.send_message("❌ Aucune chaîne trouvée avec ce nom.", ephemeral=True)
+            return
+
+        collection.delete_one({"_id": result["_id"]})
+        await interaction.response.send_message(f"✅ Chaîne **{channel_name}** supprimée de la base de données.", ephemeral=True)
+
+    @remove_alert.autocomplete("channel_name")
+    async def channel_name_autocomplete(self, interaction: discord.Interaction, current: str):
+        results = collection.find({"channel_name": {"$regex": f".*{current}.*", "$options": "i"}}).limit(25)
+        return [app_commands.Choice(name=doc["channel_name"], value=doc["channel_name"]) for doc in results]
 
 # Fonction pour ajouter le COG
 async def setup(bot):
