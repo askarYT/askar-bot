@@ -26,7 +26,7 @@ class YouTubeNotifier(commands.Cog):
             latest_url = doc.get("latest_video_url", "none")
             discord_channel_id = doc["notifying_discord_channel"]
             video_role_id = doc.get("video_role_id")
-            short_role_id = doc.get("short_role_id")
+            short_role_id = doc.get("short_role_id")  # on utilise bien "short_role_id"
 
             feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={youtube_channel_id}"
             response = requests.get(feed_url)
@@ -47,7 +47,8 @@ class YouTubeNotifier(commands.Cog):
 
             time_diff = (now - published_time).total_seconds()
 
-            if video_url != latest_url and time_diff <= 300:
+            # On envoie si la vidéo est nouvelle ou s'il n'y avait pas encore de vidéo en base, et si elle est récente (moins de 5 min)
+            if (latest_url == "none" or video_url != latest_url) and time_diff <= 300:
                 print(f"Nouvelle vidéo détectée : {video_url}")
                 collection.update_one(
                     {"_id": youtube_channel_id},
@@ -55,18 +56,21 @@ class YouTubeNotifier(commands.Cog):
                 )
 
                 discord_channel = self.bot.get_channel(int(discord_channel_id))
-                if discord_channel:
-                    # Heuristique pour détecter les shorts : on suppose ici que les shorts ont "/shorts/" ou durée courte
-                    is_short = "/shorts/" in video_url or False  # Tu peux raffiner si tu veux
+                if not discord_channel:
+                    print(f"Salon introuvable pour l’ID {discord_channel_id}")
+                    continue
 
-                    if is_short:
-                        role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
-                        msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{video_url}"
-                    else:
-                        role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
-                        msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{video_url}"
+                # Détection shorts avec "/shorts/" dans l'URL (tu peux raffiner plus tard)
+                is_short = "/shorts/" in video_url
 
-                    await discord_channel.send(msg)
+                if is_short:
+                    role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
+                    msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{video_url}"
+                else:
+                    role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
+                    msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{video_url}"
+
+                await discord_channel.send(msg)
             else:
                 print(f"Aucune nouvelle vidéo récente pour {channel_name} (diff: {int(time_diff)}s)")
 
