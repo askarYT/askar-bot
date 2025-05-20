@@ -1,12 +1,14 @@
-import os
-import discord
+import json
 import requests
+import re
+import os
+
+import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from pymongo import MongoClient
-import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 
+# Connexion à MongoDB
 client = MongoClient(os.getenv("MONGO_URI"))
 db = client["youtube_notify_db"]
 collection = db["youtube_channels"]
@@ -28,47 +30,36 @@ class YouTubeNotifier(commands.Cog):
             video_role_id = doc.get("video_role_id")
             short_role_id = doc.get("short_role_id")
 
-            feed_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={youtube_channel_id}"
-            response = requests.get(feed_url)
+            print(f"Now Checking For {channel_name}")
+            channel_url = f"https://www.youtube.com/channel/{youtube_channel_id}"
+            html = requests.get(channel_url + "/videos").text
 
-            if response.status_code != 200:
-                print(f"Erreur lors de la récupération du flux pour {channel_name}")
+            try:
+                latest_video_url = "https://www.youtube.com/watch?v=" + re.search('(?<="videoId":").*?(?=")', html).group()
+            except:
                 continue
 
-            root = ET.fromstring(response.text)
-            entry = root.find("{http://www.w3.org/2005/Atom}entry")
-            if entry is None:
-                continue
-
-            video_url = entry.find("{http://www.w3.org/2005/Atom}link").attrib["href"]
-            published_str = entry.find("{http://www.w3.org/2005/Atom}published").text
-            published_time = datetime.strptime(published_str, "%Y-%m-%dT%H:%M:%S%z")
-            now = datetime.now(timezone.utc)
-
-            time_diff = (now - published_time).total_seconds()
-
-            if video_url != latest_url and time_diff <= 300:
-                print(f"Nouvelle vidéo détectée : {video_url}")
+            if latest_url != latest_video_url:
                 collection.update_one(
                     {"_id": youtube_channel_id},
-                    {"$set": {"latest_video_url": video_url}}
+                    {"$set": {"latest_video_url": latest_video_url}}
                 )
 
                 discord_channel = self.bot.get_channel(int(discord_channel_id))
-                if discord_channel:
-                    # Heuristique pour détecter les shorts : on suppose ici que les shorts ont "/shorts/" ou durée courte
-                    is_short = "/shorts/" in video_url or False  # Tu peux raffiner si tu veux
+                if not discord_channel:
+                    print(f"⚠️ Canal Discord introuvable : {discord_channel_id}")
+                    continue
 
-                    if is_short:
-                        role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
-                        msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{video_url}"
-                    else:
-                        role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
-                        msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{video_url}"
+                is_short = "/shorts/" in latest_video_url
 
-                    await discord_channel.send(msg)
-            else:
-                print(f"Aucune nouvelle vidéo récente pour {channel_name} (diff: {int(time_diff)}s)")
+                if is_short:
+                    role_mention = f"<@&{short_role_id}>" if short_role_id else "@everyone"
+                    msg = f"{role_mention} {channel_name} a publié un nouveau **Short** ! 🎬\n{latest_video_url}"
+                else:
+                    role_mention = f"<@&{video_role_id}>" if video_role_id else "@everyone"
+                    msg = f"{role_mention} {channel_name} a publié une nouvelle **vidéo** ! 📹\n{latest_video_url}"
+
+                await discord_channel.send(msg)
 
     @app_commands.command(name="add_youtube_notification_data", description="Ajoute une chaîne YouTube à surveiller.")
     async def add_youtube_notification_data(self, interaction: discord.Interaction, channel_id: str, channel_name: str):
@@ -88,7 +79,7 @@ class YouTubeNotifier(commands.Cog):
         }
 
         collection.insert_one(data)
-        await interaction.response.send_message("✅ Chaîne ajoutée avec succès !", ephemeral=True)
+        await interaction.response.send_message("✅ Chaîne ajoutée à la base de données MongoDB !", ephemeral=True)
 
     @app_commands.command(name="set_youtube_roles", description="Définit les rôles à mentionner pour les vidéos et les shorts.")
     async def set_youtube_roles(self, interaction: discord.Interaction, channel_id: str, video_role: discord.Role = None, short_role: discord.Role = None):
@@ -109,8 +100,6 @@ class YouTubeNotifier(commands.Cog):
         else:
             await interaction.response.send_message("⚠️ Aucun rôle fourni à mettre à jour.", ephemeral=True)
 
-    async def cog_unload(self):
-        self.checkforvideos.cancel()
-
+# Fonction pour ajouter le COG
 async def setup(bot):
     await bot.add_cog(YouTubeNotifier(bot))
