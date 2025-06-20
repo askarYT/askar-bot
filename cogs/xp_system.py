@@ -46,6 +46,9 @@ class XPSystem(commands.Cog):
         self.reaction_tracking = {}
 
         # Collection pour les rôles par niveau
+        # Démarre la tâche de resynchronisation des rôles toutes les 15 minutes
+        self.sync_roles_task.start()
+
         self.level_roles = self.db["level_roles"]
 
     def get_user_data(self, user_id):
@@ -438,6 +441,61 @@ class XPSystem(commands.Cog):
         except Exception as e:
             logging.error(f"Erreur lors de l'enregistrement du rôle pour le niveau {level} : {e}")
             await interaction.response.send_message("Erreur lors de la configuration du rôle pour ce niveau.", ephemeral=True)
+
+
+    @tasks.loop(minutes=15)
+    async def sync_roles_task(self):
+        for guild in self.bot.guilds:
+            level_roles = list(self.level_roles.find({"guild_id": guild.id}))
+            if not level_roles:
+                continue
+
+            for member in guild.members:
+                if member.bot:
+                    continue
+
+                user_data = self.get_user_data(str(member.id))
+                level = user_data.get("level", 1)
+
+                for role_entry in level_roles:
+                    role = guild.get_role(role_entry["role_id"])
+                    if role and level >= role_entry["level"] and role not in member.roles:
+                        try:
+                            await member.add_roles(role, reason="Resynchronisation automatique des rôles par niveau")
+                            logging.info(f"Rôle {role.name} réattribué à {member.name} (niveau {level})")
+                        except Exception as e:
+                            logging.error(f"Erreur lors de la réattribution automatique du rôle : {e}")
+
+    @app_commands.command(name="resync-roles", description="Force la resynchronisation des rôles par niveau pour tous les membres.")
+    async def resync_roles(self, interaction: discord.Interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+        guild = interaction.guild
+        level_roles = list(self.level_roles.find({"guild_id": guild.id}))
+        if not level_roles:
+            await interaction.followup.send("Aucun rôle par niveau n'a été configuré pour ce serveur.")
+            return
+
+        count = 0
+        for member in guild.members:
+            if member.bot:
+                continue
+            user_data = self.get_user_data(str(member.id))
+            level = user_data.get("level", 1)
+            for role_entry in level_roles:
+                role = guild.get_role(role_entry["role_id"])
+                if role and level >= role_entry["level"] and role not in member.roles:
+                    try:
+                        await member.add_roles(role, reason="Synchronisation manuelle des rôles")
+                        count += 1
+                    except Exception as e:
+                        logging.error(f"Erreur lors de la synchronisation manuelle des rôles : {e}")
+
+        await interaction.followup.send(f"Synchronisation terminée. {count} rôles attribués.")
+
 
 async def setup(bot):
     await bot.add_cog(XPSystem(bot))
