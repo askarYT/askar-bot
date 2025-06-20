@@ -45,6 +45,9 @@ class XPSystem(commands.Cog):
         self.last_message_xp = {}
         self.reaction_tracking = {}
 
+        # Collection pour les rôles par niveau
+        self.level_roles = self.db["level_roles"]
+
     def get_user_data(self, user_id):
         """Récupère les données d'XP et de niveau d'un utilisateur depuis MongoDB."""
         try:
@@ -82,6 +85,20 @@ class XPSystem(commands.Cog):
                 logging.warning(f"La mise à jour pour l'utilisateur {user_id} n'a pas été effectuée.")
 
             # Vérification si l'utilisateur a monté de niveau
+
+                # Vérifie s'il existe un rôle configuré pour ce niveau
+                level_role = self.level_roles.find_one({"level": new_level})
+                if level_role and "role_id" in level_role:
+                    guild = discord.utils.get(self.bot.guilds, id=level_role["guild_id"])
+                    if guild:
+                        member = guild.get_member(int(user_id))
+                        role = guild.get_role(level_role["role_id"])
+                        if member and role and role not in member.roles:
+                            try:
+                                member.add_roles(role, reason=f"Atteint le niveau {new_level}")
+                                logging.info(f"Rôle {role.name} attribué à {member.name} pour avoir atteint le niveau {new_level}.")
+                            except Exception as e:
+                                logging.error(f"Erreur lors de l'attribution du rôle : {e}")
             if new_level > old_level:
                 logging.info(f"L'utilisateur {user_id} a atteint le niveau {new_level}.")
 
@@ -401,6 +418,26 @@ class XPSystem(commands.Cog):
             if cmd.name.startswith(current)  # Filtrer les commandes qui commencent par `current`
         ]
         return [app_commands.Choice(name=cmd, value=cmd) for cmd in commands]
+
+    @app_commands.command(name="set-level-role", description="Assigne un rôle à donner à partir d'un niveau.")
+    @app_commands.describe(level="Le niveau à atteindre", role="Le rôle à donner")
+    async def set_level_role(self, interaction: discord.Interaction, level: int, role: discord.Role):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True)
+            return
+        try:
+            self.level_roles.update_one(
+                {"level": level, "guild_id": interaction.guild.id},
+                {"$set": {"level": level, "role_id": role.id, "guild_id": interaction.guild.id}},
+                upsert=True
+            )
+            await interaction.response.send_message(
+                f"Le rôle {role.mention} sera désormais donné à partir du niveau {level}.",
+                ephemeral=True
+            )
+        except Exception as e:
+            logging.error(f"Erreur lors de l'enregistrement du rôle pour le niveau {level} : {e}")
+            await interaction.response.send_message("Erreur lors de la configuration du rôle pour ce niveau.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(XPSystem(bot))
