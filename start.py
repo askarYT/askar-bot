@@ -10,6 +10,8 @@ logging.basicConfig(level=logging.INFO)
 load_dotenv()
 token = os.getenv('ASKAR_TOKEN')
 
+logging.warning(f'STARTING BOT !')
+
 class MyBot(commands.Bot):
     async def setup_hook(self):
         for extension in ['random','ping','mimir','poke','sun','xp_system','youtube']:
@@ -20,12 +22,15 @@ class MyBot(commands.Bot):
 
     async def on_ready(self):
         await bot.tree.sync()
+        try:
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name =f"{bot.command_prefix}help"))
+        except:
+            logging.warning(f"Le status discord ne s'est pas initialisé correctement...")
+
         print(f'Lancé en tant que {self.user} !' + 'Version "discord.py": {discord.__version__}')
 
         logging.info(f'Lancé en tant que {self.user} !')
-        logging.info(f"discord.py version: {discord.__version__}")
-
-        """await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.playing, name =f"{bot.command_prefix}help"))"""
+        logging.info(f'Version de "discord.py": {discord.__version__}')
         
 
 intents = discord.Intents.all()
