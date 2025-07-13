@@ -14,10 +14,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Définition des limites d'XP/LVL pour chaque type d'interaction
 XP_LIMITS = {
-    "message": {"min": 5, "max": 13},   # XP pour les messages
-    "vocal": {"min": 6, "max": 12},     # XP pour les salons vocaux
+    "message": {"min": 4, "max": 12},   # XP pour les messages
+    "vocal": {"min": 5, "max": 11},     # XP pour les salons vocaux
     "reaction": {"min": 2, "max": 6},   # XP pour les réactions
-    "levels": {"multiplicator": 0.30},  # Multiplicateur pour lvl-up
+    "levels": {"multiplicator": 0.22},  # Multiplicateur pour lvl-up
 }
 
 class XPSystem(commands.Cog):
