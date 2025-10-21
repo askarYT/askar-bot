@@ -110,7 +110,8 @@ class TwitchNotifier(commands.Cog):
                             color=discord.Color.purple()
                         )
                         embed.add_field(name="Jeu", value=stream_data.game_name or "Non spécifié", inline=True)
-                        embed.set_image(url=stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248'))
+                        thumbnail_url = stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248')
+                        embed.set_image(url=f"{thumbnail_url}?_={int(datetime.now().timestamp())}")
                         embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
                         embed.set_footer(text=f"Rejoignez le live !")
                         
