@@ -6,6 +6,7 @@ Ce projet est un bot Discord personnel nommé "Askar-Bot", développé en Python
 
 **À chaque nouvelle demande, tu dois lire ce fichier pour comprendre le contexte et les conventions du projet.**
     **En cas de nécessité, tu peux modifier ce fichier en te basant sur sa forme actuelle, tu as aussi le droit d'ajouter, supprimer ou modifier les fichiers demander SAUF mention contraire.**
+    **Vérifie toujours le fichier pour ne pas omettre d'erreur et signale les erreurs potentiels**
 
 ## 2. Structure du Projet
 
