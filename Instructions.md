@@ -5,6 +5,7 @@
 Ce projet est un bot Discord personnel nommé "Askar-Bot", développé en Python avec la librairie `discord.py`. L'objectif est de fournir des fonctionnalités variées pour un serveur Discord, allant de la modération ludique à des outils de notification.
 
 **À chaque nouvelle demande, tu dois lire ce fichier pour comprendre le contexte et les conventions du projet.**
+    **En cas de nécessité, tu peux modifier ce fichier en te basant sur sa forme actuelle, tu as aussi le droit d'ajouter, supprimer ou modifier les fichiers demander SAUF mention contraire.**
 
 ## 2. Structure du Projet
 
