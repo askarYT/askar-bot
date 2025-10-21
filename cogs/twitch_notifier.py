@@ -224,11 +224,11 @@ class TwitchNotifier(commands.Cog):
     async def list_twitch_alerts(self, interaction: discord.Interaction):
         alerts = list(self.collection.find({"guild_id": interaction.guild_id}))
         if not alerts:
-            await interaction.response.send_message("Aucune alerte Twitch n'est configurée sur ce serveur.", ephemeral=True)
+            await interaction.response.send_message("Aucune alerte Twitch n'est configurée sur ce serveur.")
             return
 
         embed = discord.Embed(title="🚨 Alertes Twitch Actives", color=discord.Color.purple())
-        for alert in alerts:
+        for alert in sorted(alerts, key=lambda x: x['twitch_username']):
             channel = self.bot.get_channel(alert['discord_channel_id'])
             role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
             embed.add_field(name=f"👤 {alert['twitch_username']}", value=f"**Salon :** {channel.mention if channel else 'Inconnu'}\n**Rôle :** {role.mention if role else 'Aucun'}", inline=False)
@@ -246,20 +246,33 @@ class TwitchNotifier(commands.Cog):
             await interaction.response.send_message(f"❌ Aucune alerte configurée pour **{twitch_username}**.", ephemeral=True)
             return
 
-        role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
-        role_mention = role.mention if role else "Aucun rôle"
+        channel = self.bot.get_channel(alert['discord_channel_id'])
+        if not channel:
+            await interaction.response.send_message(f"❌ Le salon de notification configuré pour **{twitch_username}** est introuvable.", ephemeral=True)
+            return
 
         embed = discord.Embed(
-            title=f"🔴 TEST - {twitch_username} est en live !",
-            description="**Ceci est un test de notification.**",
+            title=f"🔴 {twitch_username.capitalize()} est en live sur Twitch !",
+            description="**Ceci est une notification de test**",
             url=f"https://twitch.tv/{twitch_username}",
-            color=discord.Color.orange()
+            color=discord.Color.purple()
         )
-        embed.add_field(name="Salon de notification", value=f"<#{alert['discord_channel_id']}>", inline=True)
-        embed.add_field(name="Rôle à mentionner", value=role_mention, inline=True)
-        embed.set_footer(text="Si ce message est visible, la configuration est correcte.")
+        embed.add_field(name="Jeu", value="Just Chatting", inline=True)
+        embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{twitch_username}-440x248.jpg")
+        embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
+        embed.set_footer(text="Rejoignez le live !")
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        try:
+            await channel.send(embed=embed)
+            await interaction.response.send_message(
+                f"✅ Notification de test pour **{twitch_username}** envoyée dans {channel.mention}.",
+                ephemeral=True
+            )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                f"❌ Je n'ai pas la permission d'envoyer de message dans le salon {channel.mention}.",
+                ephemeral=True
+            )
 
     @remove_twitch_alert.autocomplete('twitch_username')
     @test_twitch_alert.autocomplete('twitch_username')
