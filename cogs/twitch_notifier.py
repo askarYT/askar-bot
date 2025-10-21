@@ -98,7 +98,7 @@ class TwitchNotifier(commands.Cog):
                     else:
                         # Message par défaut
                         game_name = stream_data.game_name or "Non spécifié"
-                        content_message = f"**{stream_data.user_name}**: *Stream On* sur **\"{game_name}\"** !"
+                        content_message = f"🟣 **{stream_data.user_name}**: *Stream On* sur **\"{game_name}\"** !"
                         if role:
                             content_message += f"\n-# Hey {role_mention} !"
 
@@ -309,7 +309,7 @@ class TwitchNotifier(commands.Cog):
             )
         else:
             game_name = "Jeu de test"
-            content_message = f"**{twitch_username}**: *Stream On* sur **\"{game_name}\"** !"
+            content_message = f"🟣 **{twitch_username}**: *Stream On* sur **\"{game_name}\"** !"
             if role:
                 content_message += f"\n-# Hey {role.name} !" # On ne mentionne pas dans le test, on affiche le nom
 
