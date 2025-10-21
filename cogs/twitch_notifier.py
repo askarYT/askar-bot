@@ -97,9 +97,10 @@ class TwitchNotifier(commands.Cog):
                         )
                     else:
                         # Message par défaut
-                        content_message = f"🟣 {stream_data.user_name}: *Stream On* sur **{stream_data.game_name or 'Non spécifié'}** !"
+                        game_name = stream_data.game_name or "Non spécifié"
+                        content_message = f"**{stream_data.user_name}**: *Stream On* sur **\"{game_name}\"** !"
                         if role:
-                            content_message += f"\n{role_mention}"
+                            content_message += f"\n-# Hey {role_mention} !"
 
                     if channel:
                         embed = discord.Embed(
@@ -307,9 +308,10 @@ class TwitchNotifier(commands.Cog):
                 mention=role_mention_text
             )
         else:
-            content_message = f"🟣 {twitch_username}: *Stream On* sur **Jeu de test** !"
+            game_name = "Jeu de test"
+            content_message = f"**{twitch_username}**: *Stream On* sur **\"{game_name}\"** !"
             if role:
-                content_message += f"\nHey {role.name} !" # On ne mentionne pas dans le test
+                content_message += f"\n-# Hey {role.name} !" # On ne mentionne pas dans le test, on affiche le nom
 
         embed = discord.Embed(
             title=f"🔴 {twitch_username} est en live sur Twitch !",
