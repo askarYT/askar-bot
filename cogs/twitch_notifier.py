@@ -110,7 +110,7 @@ class TwitchNotifier(commands.Cog):
                             color=discord.Color.purple()
                         )
                         embed.add_field(name="Jeu", value=stream_data.game_name or "Non spécifié", inline=True)
-                        embed.set_image(url=stream_data.get_thumbnail_url(width=440, height=248))
+                        embed.set_image(url=stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248'))
                         embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
                         embed.set_footer(text=f"Rejoignez le live !")
                         
@@ -320,7 +320,7 @@ class TwitchNotifier(commands.Cog):
             color=discord.Color.purple()
         )
         embed.add_field(name="Jeu", value="Jeu de test", inline=True)
-        embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{twitch_username}-440x248.jpg")
+        embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{twitch_username}-440x248.jpg?_={int(datetime.now().timestamp())}")
         embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
         embed.set_footer(text="Rejoignez le live !")
 
