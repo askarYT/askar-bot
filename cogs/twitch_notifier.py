@@ -86,18 +86,19 @@ class TwitchNotifier(commands.Cog):
                     channel = self.bot.get_channel(alert['discord_channel_id'])
                     role = channel.guild.get_role(alert['role_id']) if alert.get('role_id') else None
                     
-                    custom_message = alert.get('custom_message')
+                    custom_title = alert.get('custom_title')
                     content_message = f"Hey {role.mention if role else ''} !"
 
-                    if custom_message:
-                        content_message = custom_message.format(
+                    if custom_title:
+                        embed_title = custom_title.format(
                             streamer=stream_data.user_name,
                             game=stream_data.game_name or "Non spécifié"
                         )
-
+                    else:
+                        embed_title = f"🔴 {stream_data.user_name} est en live sur Twitch !"
                     if channel:
                         embed = discord.Embed(
-                            title=f"🔴 {stream_data.user_name} est en live sur Twitch !",
+                            title=embed_title,
                             description=f"**{stream_data.title}**",
                             url=f"https://twitch.tv/{stream_data.user_login}",
                             color=discord.Color.purple()
@@ -160,7 +161,7 @@ class TwitchNotifier(commands.Cog):
             "twitch_username": twitch_username,
             "discord_channel_id": channel.id,
             "role_id": role.id if role else None,
-            "custom_message": None # Champ pour le message personnalisé
+            "custom_title": None # Champ pour le titre personnalisé
         }
         self.collection.insert_one(new_alert)
         await interaction.response.send_message(f"✅ Alerte activée pour **{twitch_username}** dans le salon {channel.mention}.", ephemeral=True)
@@ -206,16 +207,23 @@ class TwitchNotifier(commands.Cog):
             await interaction.response.send_message(f"❌ Aucune alerte trouvée pour **{twitch_username}** sur ce serveur.", ephemeral=True)
 
     @app_commands.command(name="twitch-set-message", description="Définit un message personnalisé pour une notification Twitch.")
-    @app_commands.describe(twitch_username="Le nom d'utilisateur Twitch", message="Le message personnalisé. Utilisez {streamer} et {game}.")
+    @app_commands.describe(twitch_username="Le nom d'utilisateur Twitch", message="Le titre personnalisé. Utilisez {streamer} et {game}. Laissez vide pour réinitialiser.")
     @app_commands.checks.has_permissions(administrator=True)
-    async def set_twitch_message(self, interaction: discord.Interaction, twitch_username: str, message: str):
+    async def set_twitch_message(self, interaction: discord.Interaction, twitch_username: str, message: str = None):
         twitch_username = twitch_username.lower()
+        
+        # Si le message est "None" ou vide, on réinitialise en mettant la valeur à None dans la BDD
+        if message is None or message.strip().lower() == "none" or message.strip() == "":
+            message_to_set = None
+        else:
+            message_to_set = message
+
         result = self.collection.update_one(
             {"twitch_username": twitch_username, "guild_id": interaction.guild_id},
-            {"$set": {"custom_message": message}}
+            {"$set": {"custom_title": message_to_set}}
         )
         if result.matched_count > 0:
-            await interaction.response.send_message(f"✅ Message personnalisé pour **{twitch_username}** défini.", ephemeral=True)
+            await interaction.response.send_message(f"✅ Titre personnalisé pour **{twitch_username}** mis à jour.", ephemeral=True)
         else:
             await interaction.response.send_message(f"❌ Aucune alerte trouvée pour **{twitch_username}**.", ephemeral=True)
 
@@ -254,21 +262,23 @@ class TwitchNotifier(commands.Cog):
         role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
 
         # --- Logique de message identique à la notification réelle ---
-        custom_message = alert.get('custom_message')
-        content_message = "" # Pas de message par défaut pour le test
+        custom_title = alert.get('custom_title')
+        content_message = "" # Le contenu du message reste vide pour le test, sauf si un rôle est défini
 
-        if custom_message:
-            # Utilise le message personnalisé s'il est défini
-            content_message = custom_message.format(
+        if custom_title:
+            # Utilise le titre personnalisé s'il est défini
+            embed_title = custom_title.format(
                 streamer=twitch_username,
                 game="Jeu de test"
             )
-        elif role:
-            # Sinon, affiche le nom du rôle sans mention
+        else:
+            embed_title = f"🔴 {twitch_username} est en live sur Twitch !"
+        
+        if role: # Affiche le nom du rôle sans mention dans le contenu
             content_message = f"Hey {role.name} !"
 
         embed = discord.Embed(
-            title=f"🔴 {twitch_username} est en live sur Twitch !",
+            title=embed_title,
             description="**Ceci est une notification de test**",
             url=f"https://twitch.tv/{twitch_username}",
             color=discord.Color.purple()
