@@ -233,7 +233,7 @@ class TwitchNotifier(commands.Cog):
             role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
             embed.add_field(name=f"👤 {alert['twitch_username']}", value=f"**Salon :** {channel.mention if channel else 'Inconnu'}\n**Rôle :** {role.mention if role else 'Aucun'}", inline=False)
 
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=False)
 
     @app_commands.command(name="twitch-test", description="Envoie une fausse notification de live pour tester la configuration.")
     @app_commands.describe(twitch_username="Le nom d'utilisateur Twitch pour le test")
@@ -251,19 +251,36 @@ class TwitchNotifier(commands.Cog):
             await interaction.response.send_message(f"❌ Le salon de notification configuré pour **{twitch_username}** est introuvable.", ephemeral=True)
             return
 
+        role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
+
+        # --- Logique de message identique à la notification réelle ---
+        custom_message = alert.get('custom_message')
+        content_message = "" # Pas de message par défaut pour le test
+
+        if custom_message:
+            # Utilise le message personnalisé s'il est défini
+            content_message = custom_message.format(
+                streamer=twitch_username,
+                game="Jeu de test"
+            )
+        elif role:
+            # Sinon, affiche le nom du rôle sans mention
+            content_message = f"Hey {role.name} !"
+
         embed = discord.Embed(
-            title=f"🔴 {twitch_username.capitalize()} est en live sur Twitch !",
+            title=f"🔴 {twitch_username} est en live sur Twitch !",
             description="**Ceci est une notification de test**",
             url=f"https://twitch.tv/{twitch_username}",
             color=discord.Color.purple()
         )
-        embed.add_field(name="Jeu", value="Just Chatting", inline=True)
+        embed.add_field(name="Jeu", value="Jeu de test", inline=True)
         embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{twitch_username}-440x248.jpg")
         embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
         embed.set_footer(text="Rejoignez le live !")
 
         try:
-            await channel.send(embed=embed)
+            # Envoie le contenu et l'embed, comme pour une vraie notification
+            await channel.send(content=content_message, embed=embed)
             await interaction.response.send_message(
                 f"✅ Notification de test pour **{twitch_username}** envoyée dans {channel.mention}.",
                 ephemeral=True
