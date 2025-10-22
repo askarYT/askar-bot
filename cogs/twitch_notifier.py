@@ -2,8 +2,10 @@ import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 from pymongo import MongoClient
+import asyncio
 import os
 import logging
+from twitchAPI.helper import first
 from twitchAPI.twitch import Twitch
 from datetime import datetime, timezone
 
@@ -39,7 +41,7 @@ class TwitchNotifier(commands.Cog):
         self.twitch = None # Sera initialisé de manière asynchrone
 
         # Dictionnaire pour suivre les sessions de stream déjà notifiées {user_login: {stream_id, message, start_time}}
-        self.notified_streams = {}
+        self.notified_streams = {} # {user_login: {'stream_id', 'message', 'start_time', 'image_update_task'}}
 
         # Démarrage de la tâche en arrière-plan
         self.bot.loop.create_task(self.initialize_twitch_and_start_loop())
@@ -72,6 +74,14 @@ class TwitchNotifier(commands.Cog):
         except Exception as e:
             logging.error(f"Erreur lors de la récupération des streams Twitch : {e}")
             return
+
+        # Pour récupérer les photos de profil, on doit faire un appel séparé
+        try:
+            # Récupère les objets User de Twitch pour les streamers en live
+            users_info = {user.login.lower(): user async for user in self.twitch.get_users(logins=[s.user_login for s in live_streams.values()])}
+        except Exception as e:
+            logging.error(f"Erreur lors de la récupération des informations des utilisateurs Twitch : {e}")
+            users_info = {}
 
         for alert in all_alerts:
             username = alert['twitch_username']
@@ -109,20 +119,30 @@ class TwitchNotifier(commands.Cog):
                             url=f"https://twitch.tv/{stream_data.user_login}",
                             color=discord.Color.purple()
                         )
+                        # Utilise la miniature du stream comme image principale
                         embed.add_field(name="Jeu", value=stream_data.game_name or "Non spécifié", inline=True)
                         thumbnail_url = stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248')
                         embed.set_image(url=f"{thumbnail_url}?_={int(datetime.now().timestamp())}")
-                        embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
-                        embed.set_footer(text=f"Rejoignez le live !")
                         
+                        # Utilise la photo de profil du streamer comme thumbnail
+                        streamer_info = users_info.get(username.lower())
+                        if streamer_info and streamer_info.profile_image_url:
+                            embed.set_thumbnail(url=streamer_info.profile_image_url)
+
+                        embed.set_footer(text=f"Rejoignez le live !")
                         try:
                             sent_message = await channel.send(content=content_message, embed=embed)
                             # Stocker les informations pour la notification de fin
                             self.notified_streams[username] = {
                                 'stream_id': stream_data.id,
                                 'message': sent_message,
-                                'start_time': stream_data.started_at
+                                'start_time': stream_data.started_at,
+                                'image_update_task': None # Initialise la tâche de mise à jour d'image
                             }
+                            # Planifier la mise à jour de l'image après un court délai
+                            self.notified_streams[username]['image_update_task'] = self.bot.loop.create_task(
+                                self.schedule_image_update(username, stream_data.id, sent_message)
+                            )
                         except discord.Forbidden:
                             logging.warning(f"Permission manquante pour envoyer un message dans le salon {channel.id}")
             else: # Le streamer n'est pas en live
@@ -130,6 +150,10 @@ class TwitchNotifier(commands.Cog):
                 if username in self.notified_streams:
                     notification_data = self.notified_streams[username]
                     original_message = notification_data['message']
+                    # Annuler la tâche de mise à jour d'image si elle est toujours en attente
+                    if notification_data['image_update_task'] and not notification_data['image_update_task'].done():
+                        notification_data['image_update_task'].cancel()
+                        logging.debug(f"Tâche de mise à jour d'image annulée pour {username}.")
                     start_time = notification_data['start_time']
                     duration = datetime.now(timezone.utc) - start_time
 
@@ -151,6 +175,49 @@ class TwitchNotifier(commands.Cog):
     @check_streams.before_loop
     async def before_check_streams(self):
         await self.bot.wait_until_ready()
+
+    async def schedule_image_update(self, twitch_username: str, stream_id: str, message_to_edit: discord.Message):
+        """
+        Planifie une mise à jour de l'image de l'embed après un délai,
+        pour s'assurer que la miniature du stream est bien générée.
+        """
+        try:
+            await asyncio.sleep(120) # Attendre 2 minutes
+
+            # Vérifier si le stream est toujours en cours et est le même
+            # On utilise self.notified_streams pour s'assurer que le stream n'a pas été dénotifié ou remplacé
+            if twitch_username not in self.notified_streams or self.notified_streams[twitch_username]['stream_id'] != stream_id:
+                logging.debug(f"Mise à jour d'image annulée pour {twitch_username}: stream non trouvé ou ID différent.")
+                return
+
+            # Re-récupérer les informations du stream
+            streams = await self.twitch.get_streams(user_login=[twitch_username])
+            latest_stream_data = await first(streams)
+
+            if latest_stream_data and latest_stream_data.id == stream_id:
+                # Récupérer le message original pour édition
+                fetched_message = await message_to_edit.channel.fetch_message(message_to_edit.id)
+                if fetched_message.embeds:
+                    current_embed = fetched_message.embeds[0]
+                    new_thumbnail_url = latest_stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248')
+                    new_thumbnail_url_with_cache_buster = f"{new_thumbnail_url}?_={int(datetime.now().timestamp())}"
+
+                    # Mettre à jour l'image si elle est différente de celle actuellement dans l'embed
+                    # Cela garantit que l'édition ne se fait qu'une seule fois si l'image change
+                    if not current_embed.image or current_embed.image.url != new_thumbnail_url_with_cache_buster:
+                        current_embed.set_image(url=new_thumbnail_url_with_cache_buster)
+                        await fetched_message.edit(embed=current_embed)
+                        logging.info(f"Image de notification mise à jour pour {twitch_username} (stream ID: {stream_id}).")
+                else:
+                    logging.warning(f"Message {message_to_edit.id} pour {twitch_username} n'a pas d'embed à mettre à jour.")
+        except discord.NotFound:
+            logging.warning(f"Message de notification {message_to_edit.id} pour {twitch_username} introuvable lors de la mise à jour de l'image.")
+        except Exception as e:
+            logging.error(f"Erreur lors de la mise à jour de l'image pour {twitch_username} (stream ID: {stream_id}): {e}")
+        finally:
+            # Nettoyer la référence de la tâche une fois qu'elle est terminée (ou annulée)
+            if twitch_username in self.notified_streams and self.notified_streams[twitch_username]['stream_id'] == stream_id:
+                self.notified_streams[twitch_username]['image_update_task'] = None
 
     # --- Commandes d'administration ---
 
@@ -299,6 +366,16 @@ class TwitchNotifier(commands.Cog):
         role = interaction.guild.get_role(alert['role_id']) if alert.get('role_id') else None
         role_mention_text = role.name if role else "" # Pour le test, on ne mentionne pas, on affiche le nom
 
+        # Récupération de la photo de profil pour le test
+        profile_image_url = None
+        try:
+            async for user in self.twitch.get_users(logins=[twitch_username]):
+                profile_image_url = user.profile_image_url
+                break
+        except Exception as e:
+            logging.warning(f"Impossible de récupérer la photo de profil pour le test de {twitch_username}: {e}")
+
+
         # --- Logique de message identique à la notification réelle ---
         custom_message = alert.get('custom_message')
 
@@ -322,7 +399,8 @@ class TwitchNotifier(commands.Cog):
         )
         embed.add_field(name="Jeu", value="Jeu de test", inline=True)
         embed.set_image(url=f"https://static-cdn.jtvnw.net/previews-ttv/live_user_{twitch_username}-440x248.jpg?_={int(datetime.now().timestamp())}")
-        embed.set_thumbnail(url="https://static.twitchcdn.net/assets/favicon-32-e29e246c157142c94346.png")
+        if profile_image_url:
+            embed.set_thumbnail(url=profile_image_url)
         embed.set_footer(text="Rejoignez le live !")
 
         try:
