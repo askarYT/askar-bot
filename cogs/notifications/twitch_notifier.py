@@ -76,14 +76,6 @@ class TwitchNotifier(commands.Cog):
             logging.error(f"Erreur lors de la récupération des streams Twitch : {e}")
             return
 
-        # Pour récupérer les photos de profil, on doit faire un appel séparé
-        try:
-            # Récupère les objets User de Twitch pour les streamers en live
-            users_info = {user.login.lower(): user async for user in self.twitch.get_users(logins=[s.user_login for s in live_streams.values()])}
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des informations des utilisateurs Twitch : {e}")
-            users_info = {}
-
         for alert in all_alerts:
             username = alert['twitch_username']
             stream_data = live_streams.get(username.lower())
@@ -125,10 +117,10 @@ class TwitchNotifier(commands.Cog):
                         thumbnail_url = stream_data.thumbnail_url.replace('{width}', '440').replace('{height}', '248')
                         embed.set_image(url=f"{thumbnail_url}?_={int(datetime.now().timestamp())}")
                         
-                        # Utilise la photo de profil du streamer comme thumbnail
-                        streamer_info = users_info.get(username.lower())
-                        if streamer_info and streamer_info.profile_image_url:
-                            embed.set_thumbnail(url=streamer_info.profile_image_url)
+                        # On récupère la photo de profil via une autre méthode pour éviter l'erreur d'authentification
+                        profile_image_url = await self.get_user_profile_image(stream_data.user_login)
+                        if profile_image_url:
+                            embed.set_thumbnail(url=profile_image_url)
 
                         embed.set_footer(text=f"Rejoignez le live !")
                         try:
@@ -219,6 +211,17 @@ class TwitchNotifier(commands.Cog):
             # Nettoyer la référence de la tâche une fois qu'elle est terminée (ou annulée)
             if twitch_username in self.notified_streams and self.notified_streams[twitch_username]['stream_id'] == stream_id:
                 self.notified_streams[twitch_username]['image_update_task'] = None
+
+    async def get_user_profile_image(self, user_login: str) -> str | None:
+        """Récupère l'URL de l'image de profil d'un utilisateur pour éviter les problèmes d'authentification."""
+        try:
+            user = await first(self.twitch.get_users(logins=[user_login]))
+            if user:
+                return user.profile_image_url
+        except Exception as e:
+            # On log l'erreur mais on ne la propage pas pour ne pas bloquer les notifications
+            logging.warning(f"Impossible de récupérer l'image de profil pour {user_login}: {e}")
+        return None
 
     # --- Commandes d'administration ---
 

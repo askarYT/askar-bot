@@ -120,18 +120,9 @@ class TwitchFollower(commands.Cog):
                 await interaction.followup.send("❌ Un des pseudos Twitch (le tien ou celui du streamer) est invalide.")
                 return
 
-            # 4. Vérifier si l'utilisateur suit la chaîne.
-            # On récupère la liste des chaînes suivies par l'utilisateur
-            # et on vérifie si la chaîne du streamer est dedans.
-            # Cette méthode ne requiert qu'un token d'application.
-            is_following = False
-            try:
-                async for follow in self.twitch.get_users_follows(from_id=user_id):
-                    if follow.to_id == streamer_id:
-                        is_following = True
-                        break
-            except Exception as e:
-                logging.error(f"Erreur lors de la récupération des follows pour {linked_twitch_username}: {e}")
+            # 4. Vérifier si l'utilisateur suit la chaîne
+            follow_relation = await first(self.twitch.get_users_follows(from_id=user_id, to_id=streamer_id))
+            is_following = follow_relation is not None
 
             member = interaction.user
             if is_following:
