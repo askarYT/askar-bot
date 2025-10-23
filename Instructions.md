@@ -88,7 +88,7 @@ Cette section liste toutes les commandes d'application (`/`) disponibles, class�
 - `/stop_message`: Arrête l'envoi automatique du message.
 - `/edit_message`: Modifie le message automatique actuel.
 
-### `twitch_notifier.py`
+### `notifications/twitch_notifier.py`
 - `/twitch-add <twitch_username> <channel> [role]`: Ajoute une notification de live Twitch.
 - `/twitch-remove <twitch_username>`: Supprime une notification de live Twitch.
 - `/twitch-edit <twitch_username> [channel] [role]`: Modifie une alerte Twitch existante.
@@ -96,17 +96,20 @@ Cette section liste toutes les commandes d'application (`/`) disponibles, class�
 - `/twitch-list`: Affiche toutes les alertes Twitch configurées sur le serveur.
 - `/twitch-test <twitch_username>`: Envoie une fausse notification de live pour tester la configuration.
 
+### `notifications/youtube_notifier.py`
+- `/youtube-add <channel_url> <channel> [video_role] [short_role]`: Ajoute une notification pour une chaîne YouTube.
+- `/youtube-remove <channel_name>`: Supprime une notification YouTube.
+- `/youtube-edit <channel_name> [channel] [video_role] [short_role]`: Modifie une alerte YouTube existante.
+- `/youtube-set-message <channel_name>`: Définit les messages personnalisés pour une chaîne.
+- `/youtube-list`: Affiche toutes les alertes YouTube configurées.
+- `/youtube-test <channel_name>`: Envoie une fausse notification pour tester la configuration.
+
 ### `status.py`
 - `/setstatus [activity_type] [activity_text] [status]`: Change l'activité et le statut du bot.
 - `/setcycle <interval> <activities>`: Alterner entre plusieurs activités à intervalles réguliers.
 
 ### `random.py`
 - `/random [min] [max]`: Génère un nombre aléatoire.
-
-### `youtube.py`
-- `/set_alert <channel_id> <channel_name> <notif_channel>`: Ajoute une chaîne YouTube à surveiller.
-- `/set_alert_roles [video_role] [short_role] [twitch_role]`: Définit les rôles globaux à mentionner pour toutes les chaînes.
-- `/remove_alert <channel_name>`: Supprime une alerte YouTube par nom de chaîne.
 
 ### `alerts.py`
 - `/alerts`: Afficher les alertes et les utilisateurs inscrits.
