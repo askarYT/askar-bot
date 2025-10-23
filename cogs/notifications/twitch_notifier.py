@@ -49,7 +49,8 @@ class TwitchNotifier(commands.Cog):
     async def initialize_twitch_and_start_loop(self):
         """Initialise l'API Twitch de manière asynchrone et démarre la boucle."""
         try:
-            self.twitch = await Twitch(self.twitch_client_id, self.twitch_client_secret)
+            self.twitch = await Twitch(self.twitch_client_id, self.twitch_client_secret, target_app_auth_scope=None)
+            await self.twitch.authenticate_app([]) # Force l'authentification de l'application au démarrage
             logging.info("Cog 'TwitchNotifier': Client Twitch API initialisé avec succès.")
             self.check_streams.start()
         except Exception as e:

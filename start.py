@@ -42,10 +42,8 @@ class MyBot(commands.Bot):
         except:
             logging.warning(f"Le status discord ne s'est pas initialisé correctement...")
 
-        print(f'Lancé en tant que {self.user} !' + 'Version "discord.py": {discord.__version__}')
-
         logging.info(f'Lancé en tant que {self.user} !')
-        logging.info(f'Version de "discord.py": {discord.__version__}')
+        logging.info(f'Version de discord.py: {discord.__version__}')
         
 
 intents = discord.Intents.all()
