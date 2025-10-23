@@ -49,4 +49,11 @@ class MyBot(commands.Bot):
 intents = discord.Intents.all()
 bot = MyBot(command_prefix='.', intents=intents)
 
+@bot.before_app_command_invoke
+async def log_app_command_usage(interaction: discord.Interaction):
+    """Log l'utilisation de chaque commande d'application (slash command)."""
+    command_name = interaction.command.qualified_name
+    user = interaction.user
+    logging.info(f"Commande '/{command_name}' utilisée par {user} (ID: {user.id})")
+
 bot.run(token, log_handler=None) # On désactive le handler par défaut de discord.py car on a le nôtre
