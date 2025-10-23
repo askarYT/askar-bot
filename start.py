@@ -11,7 +11,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO) # Niveau de log minimal à traiter
 
 # 2. Créer un formateur pour uniformiser le style des logs
-log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+log_format = logging.Formatter('%(asctime)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
 
 # 3. Créer un handler pour la console (ce que tu vois dans PuTTY)
 console_handler = logging.StreamHandler()
