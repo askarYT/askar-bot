@@ -104,6 +104,8 @@ class YouTubeNotifier(commands.Cog):
         self.notified_videos = {}
         # Cache pour stocker l'ID de la playlist d'uploads d'une chaîne
         self.channel_uploads_ids = {}
+        # Cache pour les handles YouTube -> channel ID
+        self.handle_cache = {}
 
         self.check_videos.start()
 
@@ -228,8 +230,20 @@ class YouTubeNotifier(commands.Cog):
                 channel_id = channel_url.split("/channel/")[1].split("/")[0]
                 request = self.youtube.channels().list(part="snippet", id=channel_id)
             elif "/@" in channel_url:
-                custom_name = channel_url.split("/@")[1].split("/")[0]
-                request = self.youtube.channels().list(part="snippet", forUsername=custom_name)
+                handle = channel_url.split("/@")[1].split("/")[0]
+                # Le paramètre forUsername est déprécié. On doit utiliser la recherche.
+                # On vérifie d'abord notre cache
+                if handle in self.handle_cache:
+                    request = self.youtube.channels().list(part="snippet", id=self.handle_cache[handle])
+                else:
+                    # On recherche la chaîne par son handle
+                    search_request = self.youtube.search().list(part="snippet", q=f"@{handle}", type="channel", maxResults=1)
+                    search_response = await self.bot.loop.run_in_executor(None, search_request.execute)
+                    if not search_response.get("items"):
+                        await interaction.followup.send(f"❌ Impossible de trouver une chaîne avec le handle `@{handle}`.")
+                        return
+                    channel_id = search_response["items"][0]["id"]["channelId"]
+                    request = self.youtube.channels().list(part="snippet", id=channel_id)
             else:
                 await interaction.followup.send("❌ URL de chaîne YouTube invalide.")
                 return
@@ -242,6 +256,10 @@ class YouTubeNotifier(commands.Cog):
             yt_channel_info = response["items"][0]
             yt_channel_id = yt_channel_info["id"]
             yt_channel_name = yt_channel_info["snippet"]["title"]
+
+            # Mettre en cache le handle si on l'a trouvé via la recherche
+            if "/@" in channel_url:
+                self.handle_cache[handle] = yt_channel_id
 
             if self.collection.find_one({"youtube_channel_id": yt_channel_id, "guild_id": interaction.guild_id}):
                 await interaction.followup.send(f"❌ Une alerte pour **{yt_channel_name}** existe déjà.")
