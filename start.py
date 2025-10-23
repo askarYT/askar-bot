@@ -30,7 +30,7 @@ token = os.getenv('ASKAR_TOKEN')
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
-        for extension in ['random','ping','mimir','poke','sun','xp_system','notifications.youtube_notifier', 'notifications.twitch_notifier', 'twitch_follower']:
+        for extension in ['random','ping','mimir','poke','sun','xp_system','notifications.youtube_notifier', 'notifications.twitch_notifier']:
             await self.load_extension(f'cogs.{extension}')
             logging.info(f'Loaded: cogs.{extension}')
 
