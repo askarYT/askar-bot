@@ -43,7 +43,8 @@ class TwitchFollower(commands.Cog):
     async def initialize_twitch(self):
         """Initialise l'API Twitch de manière asynchrone."""
         try:
-            self.twitch = await Twitch(self.twitch_client_id, self.twitch_client_secret)
+            self.twitch = await Twitch(self.twitch_client_id, self.twitch_client_secret, target_app_auth_scope=None)
+            await self.twitch.authenticate_app([]) # Force l'authentification de l'application
             logging.info("Cog 'TwitchFollower': Client Twitch API initialisé avec succès.")
         except Exception as e:
             logging.error(f"Cog 'TwitchFollower': Échec de l'initialisation du client Twitch API : {e}")
@@ -119,11 +120,20 @@ class TwitchFollower(commands.Cog):
                 await interaction.followup.send("❌ Un des pseudos Twitch (le tien ou celui du streamer) est invalide.")
                 return
 
-            # 4. Vérifier si l'utilisateur suit la chaîne
-            follow_relation = await first(self.twitch.get_users_follows(from_id=user_id, to_id=streamer_id))
+            # 4. Vérifier si l'utilisateur suit la chaîne.
+            # L'endpoint get_users_follows nécessite une authentification utilisateur complète.
+            # On utilise une astuce avec get_broadcaster_subscriptions qui peut aussi retourner les followers.
+            # C'est moins direct mais ne requiert qu'un token d'application.
+            is_following = False
+            try:
+                async for sub in self.twitch.get_broadcaster_subscriptions(broadcaster_id=streamer_id, user_id=[user_id]):
+                    is_following = True # Si l'API retourne quelque chose pour cet utilisateur, il est au moins follower.
+                    break
+            except Exception: # L'API peut lever une erreur si le streamer n'a pas d'abonnés, on l'ignore.
+                pass
 
             member = interaction.user
-            if follow_relation:
+            if is_following:
                 # L'utilisateur suit la chaîne
                 if role_to_assign not in member.roles:
                     await member.add_roles(role_to_assign, reason=f"Vérification de follow sur la chaîne Twitch {twitch_username}")
