@@ -204,7 +204,7 @@ class YouTubeNotifier(commands.Cog):
                         embed.timestamp = datetime.fromisoformat(latest_video["snippet"]["publishedAt"].replace("Z", "+00:00"))
 
                         try:
-                            await discord_channel.send(content=content_message, embed=embed)
+                            await discord_channel.send(content=f"{content_message}\n{video_url}", embed=embed)
                         except discord.Forbidden:
                             logging.warning(f"Permission manquante pour envoyer un message dans le salon {discord_channel.id}")
 
@@ -411,14 +411,15 @@ class YouTubeNotifier(commands.Cog):
 
         try:
             # --- Test pour une VIDÉO ---
+            video_url = f"https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Lien de test
             video_role = interaction.guild.get_role(alert.get('video_role_id')) if alert.get('video_role_id') else None
-            video_role_mention = video_role.mention if video_role else ""
+            video_role_text = f"@{video_role.name}" if video_role else ""
             custom_video_message = alert.get('custom_video_message')
             
             if custom_video_message:
-                video_content = custom_video_message.format(channel=channel_name, mention=video_role_mention).strip()
+                video_content = custom_video_message.format(channel=channel_name, mention=video_role_text).strip()
             else:
-                video_content = f"**{channel_name}** a publié une nouvelle vidéo ! 📹 {video_role_mention}".strip()
+                video_content = f"**{channel_name}** a publié une nouvelle vidéo ! 📹 {video_role_text}".strip()
 
             video_embed = discord.Embed(
                 title="[TEST] Titre de la vidéo de test",
@@ -431,17 +432,18 @@ class YouTubeNotifier(commands.Cog):
             video_embed.set_author(name=channel_name, url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}")
             video_embed.set_footer(text="Nouveau contenu YouTube : Vidéo (Test)")
             video_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(content=video_content, embed=video_embed)
+            await channel.send(content=f"{video_content}\n{video_url}", embed=video_embed)
 
             # --- Test pour un SHORT ---
+            short_url = f"https://www.youtube.com/shorts/c_n_F5j6_eA" # Lien de test
             short_role = interaction.guild.get_role(alert.get('short_role_id')) if alert.get('short_role_id') else None
-            short_role_mention = short_role.mention if short_role else ""
+            short_role_text = f"@{short_role.name}" if short_role else ""
             custom_short_message = alert.get('custom_short_message')
 
             if custom_short_message:
-                short_content = custom_short_message.format(channel=channel_name, mention=short_role_mention).strip()
+                short_content = custom_short_message.format(channel=channel_name, mention=short_role_text).strip()
             else:
-                short_content = f"**{channel_name}** a publié un nouveau Short ! 🎬 {short_role_mention}".strip()
+                short_content = f"**{channel_name}** a publié un nouveau Short ! 🎬 {short_role_text}".strip()
 
             short_embed = discord.Embed(
                 title="[TEST] Titre du Short de test",
@@ -454,7 +456,7 @@ class YouTubeNotifier(commands.Cog):
             short_embed.set_author(name=channel_name, url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}")
             short_embed.set_footer(text="Nouveau contenu YouTube : Short (Test)")
             short_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(content=short_content, embed=short_embed)
+            await channel.send(content=f"{short_content}\n{short_url}", embed=short_embed)
 
             await interaction.followup.send(f"✅ Notifications de test pour **{channel_name}** envoyées dans {channel.mention}.")
 

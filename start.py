@@ -45,12 +45,19 @@ class MyBot(commands.Bot):
         logging.info(f'Lancé en tant que {self.user} !')
         logging.info(f'Version de discord.py: {discord.__version__}')
         
-    async def before_app_command_invoke(self, interaction: discord.Interaction):
+    @commands.Cog.listener()
+    async def on_app_command_completion(self, interaction: discord.Interaction, command: app_commands.Command):
         """Log l'utilisation de chaque commande d'application (slash command)."""
-        command_name = interaction.command.qualified_name
+        command_name = command.qualified_name
         user = interaction.user
         logging.info(f"Commande '/{command_name}' utilisée par {user} (ID: {user.id})")
 
+    @commands.Cog.listener()
+    async def on_command_completion(self, ctx: commands.Context):
+        """Log l'utilisation de chaque commande à préfixe."""
+        command_name = ctx.command.qualified_name
+        user = ctx.author
+        logging.info(f"Commande '{ctx.prefix}{command_name}' utilisée par {user} (ID: {user.id})")
 
 intents = discord.Intents.all()
 bot = MyBot(command_prefix='.', intents=intents)
