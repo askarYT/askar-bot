@@ -121,16 +121,17 @@ class TwitchFollower(commands.Cog):
                 return
 
             # 4. Vérifier si l'utilisateur suit la chaîne.
-            # L'endpoint get_users_follows nécessite une authentification utilisateur complète.
-            # On utilise une astuce avec get_broadcaster_subscriptions qui peut aussi retourner les followers.
-            # C'est moins direct mais ne requiert qu'un token d'application.
+            # On récupère la liste des chaînes suivies par l'utilisateur
+            # et on vérifie si la chaîne du streamer est dedans.
+            # Cette méthode ne requiert qu'un token d'application.
             is_following = False
             try:
-                async for sub in self.twitch.get_broadcaster_subscriptions(broadcaster_id=streamer_id, user_id=[user_id]):
-                    is_following = True # Si l'API retourne quelque chose pour cet utilisateur, il est au moins follower.
-                    break
-            except Exception: # L'API peut lever une erreur si le streamer n'a pas d'abonnés, on l'ignore.
-                pass
+                async for follow in self.twitch.get_users_follows(from_id=user_id):
+                    if follow.to_id == streamer_id:
+                        is_following = True
+                        break
+            except Exception as e:
+                logging.error(f"Erreur lors de la récupération des follows pour {linked_twitch_username}: {e}")
 
             member = interaction.user
             if is_following:
