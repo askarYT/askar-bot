@@ -220,6 +220,14 @@ class XPSystem(commands.Cog):
                 await asyncio.sleep(60)
                 if not member.voice or not member.voice.channel:  # Vérifie si l'utilisateur est encore en vocal
                     break
+
+                # Vérifie le nombre de membres humains dans le salon vocal
+                current_channel = member.voice.channel
+                human_members = [m for m in current_channel.members if not m.bot]
+                if len(human_members) < 2:
+                    logging.debug(f"Gain d'XP vocal sauté pour {member.display_name} (seul dans le salon).")
+                    continue # On saute ce cycle de gain d'XP
+
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
                 old_level, new_level = self.update_user_data(str(member.id), xp_gained, source="Vocal")
                 if old_level is not None and new_level > old_level:
@@ -403,7 +411,7 @@ class XPSystem(commands.Cog):
             cmd.name for cmd in self.bot.tree.get_commands()
             if cmd.name.startswith(current)  # Filtrer les commandes qui commencent par `current`
         ]
-        return [app_commands.Choice(name=cmd, value=cmd) for cmd in commands]
+        return [app_commands.Choice(name=cmd, value=cmd) for cmd in commands[:25]]
 
     @app_commands.command(name="set-level-role", description="Assigne un rôle à donner à partir d'un niveau.")
     @app_commands.describe(level="Le niveau à atteindre", role="Le rôle à donner")
