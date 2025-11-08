@@ -17,6 +17,28 @@ XP_LIMITS = {
     "levels": {"multiplicator": 0.22},  # Multiplicateur pour lvl-up
 }
 
+def has_xp_permission():
+    """
+    Décorateur de permission personnalisé pour les commandes d'application.
+    Vérifie si l'utilisateur a le niveau requis pour utiliser la commande.
+    """
+    async def predicate(interaction: discord.Interaction) -> bool:
+        # Récupère le cog XPSystem depuis l'instance du bot
+        xp_cog = interaction.client.get_cog('XPSystem')
+        command_name = interaction.command.name
+
+        if not xp_cog:
+            return False # Ne devrait jamais arriver si le bot est bien lancé
+
+        is_allowed, required_level = xp_cog.has_command_permission(command_name, interaction.user)
+        if not is_allowed:
+            await interaction.response.send_message(
+                f"❌ Tu n'as pas le niveau requis pour utiliser cette commande. (Niveau **{required_level}** requis)", ephemeral=True
+            )
+            return False
+        return True
+    return app_commands.check(predicate)
+
 class XPSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -152,27 +174,6 @@ class XPSystem(commands.Cog):
             logging.error(f"Erreur lors de la vérification des permissions pour la commande {command_name} : {e}")
             return False, float('inf')
 
-    def has_xp_permission():
-        """
-        Décorateur de permission personnalisé pour les commandes d'application.
-        Vérifie si l'utilisateur a le niveau requis pour utiliser la commande.
-        """
-        async def predicate(interaction: discord.Interaction) -> bool:
-            # Récupère le cog XPSystem depuis l'instance du bot
-            xp_cog = interaction.client.get_cog('XPSystem')
-            command_name = interaction.command.name
-
-            if not xp_cog:
-                return False # Ne devrait jamais arriver si le bot est bien lancé
-
-            is_allowed, required_level = xp_cog.has_command_permission(command_name, interaction.user)
-            if not is_allowed:
-                await interaction.response.send_message(
-                    f"❌ Tu n'as pas le niveau requis pour utiliser cette commande. (Niveau **{required_level}** requis)", ephemeral=True
-                )
-                return False
-            return True
-        return app_commands.check(predicate)
 
     @commands.Cog.listener()
     async def on_message(self, message):
