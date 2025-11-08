@@ -34,7 +34,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
     # Si l'erreur est une CheckFailure (permission refusée), on l'ignore silencieusement.
     # Le message d'erreur est déjà envoyé à l'utilisateur par le décorateur.
     if isinstance(error, app_commands.CheckFailure):
-        logging.warning(f"Permission refusée pour la commande '/{interaction.command.name}' par {interaction.user}.")
+        logging.warning(f"Permission refusée pour la commande '/{interaction.command.name}' par {interaction.user} (ID: {interaction.user.id}).")
         return
     # Pour toutes les autres erreurs, on affiche le traceback complet.
     logging.error(f"Une erreur non gérée est survenue pour la commande '/{interaction.command.name}':", exc_info=error)

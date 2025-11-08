@@ -102,7 +102,7 @@ class XPSystem(commands.Cog):
                 upsert=True
             )
             
-            logging.info(f"Ajout de {xp_amount} XP pour l'utilisateur {user_id} (source : {source}). Nouveau niveau : {new_level}.")
+            logging.info(f"+{xp_amount} XP pour {user_id} (source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
             return old_level, new_level
         except Exception as e:
             logging.error(f"Erreur lors de la mise à jour des données d'XP : {e}")
@@ -113,7 +113,7 @@ class XPSystem(commands.Cog):
         if new_level <= old_level:
             return
 
-        logging.info(f"L'utilisateur {user_id} a atteint le niveau {new_level}.")
+        logging.info(f"LEVEL UP: Utilisateur {user_id} a atteint le niveau {new_level}.")
 
         # Attribuer les rôles
         all_level_roles = self.level_roles_collection.find({"guild_id": {"$exists": True}})
@@ -126,9 +126,9 @@ class XPSystem(commands.Cog):
                     if member and role and role not in member.roles:
                         try:
                             await member.add_roles(role, reason=f"Atteint le niveau {level_role['level']}")
-                            logging.info(f"Rôle '{role.name}' attribué à {member.display_name} pour avoir atteint le niveau {level_role['level']}.")
+                            logging.info(f"Rôle '{role.name}' attribué à {member.display_name} (ID: {member.id}) pour avoir atteint le niveau {level_role['level']}.")
                         except discord.Forbidden:
-                            logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.display_name}.")
+                            logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.display_name} (ID: {member.id}).")
                         except Exception as e:
                             logging.error(f"Erreur lors de l'attribution du rôle : {e}")
 
@@ -250,7 +250,7 @@ class XPSystem(commands.Cog):
                 current_channel = member.voice.channel
                 human_members = [m for m in current_channel.members if not m.bot]
                 if len(human_members) < 2:
-                    logging.debug(f"Gain d'XP vocal sauté pour {member.display_name} (seul dans le salon).")
+                    logging.debug(f"Gain d'XP vocal sauté pour {member.display_name} (ID: {member.id}) (seul dans le salon).")
                     continue # On saute ce cycle de gain d'XP
 
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
@@ -460,9 +460,9 @@ class XPSystem(commands.Cog):
                     if role and level >= role_entry["level"] and role not in member.roles:
                         try:
                             await member.add_roles(role, reason="Resynchronisation automatique des rôles par niveau")
-                            logging.info(f"Rôle '{role.name}' réattribué à {member.display_name} (niveau {level}) via resync.")
+                            logging.info(f"Rôle '{role.name}' réattribué à {member.display_name} (ID: {member.id}) (niveau {level}) via resync.")
                         except discord.Forbidden:
-                            logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.display_name} via resync.")
+                            logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.display_name} (ID: {member.id}) via resync.")
                         except Exception as e:
                             logging.error(f"Erreur lors de la réattribution automatique du rôle : {e}")
 
@@ -494,7 +494,7 @@ class XPSystem(commands.Cog):
                 if role and level >= role_entry["level"] and role not in member.roles:
                     try:
                         await member.add_roles(role, reason="Synchronisation manuelle des rôles")
-                        logging.info(f"Rôle '{role.name}' attribué à {member.display_name} via resync manuel.")
+                        logging.info(f"Rôle '{role.name}' attribué à {member.display_name} (ID: {member.id}) via resync manuel.")
                         count += 1
                     except Exception as e:
                         logging.error(f"Erreur lors de la synchronisation manuelle des rôles : {e}")

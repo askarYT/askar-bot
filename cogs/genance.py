@@ -142,7 +142,7 @@ class GenanceSystem(commands.Cog):
                 else:
                     # Répondre via un message privé (éphemeral) si le bot n'a pas la permission
                     await message.author.send(response)
-                    logging.info(f"Mot gênant détecté : '{word}' (ou une variante) dans le message : '{message.content}'")
+                    logging.info(f"Mot gênant '{word}' détecté par {message.author} (ID: {message.author.id}) dans le message : '{message.content}'")
                 break  # Arrêter après le premier mot gênant détecté
 
     @app_commands.command(name="genance", description="Consulte les points de gênance d'un utilisateur.")
