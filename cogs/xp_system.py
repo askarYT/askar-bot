@@ -8,9 +8,6 @@ import logging
 import os
 import math
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # Définition des limites d'XP/LVL pour chaque type d'interaction
 XP_LIMITS = {
     "message": {"min": 4, "max": 12},   # XP pour les messages

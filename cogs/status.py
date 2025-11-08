@@ -6,9 +6,6 @@ import os
 import logging
 import asyncio
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
 # ID de l'utilisateur autorisé
 AUTHORIZED_USER_ID = 463639826361614336
 

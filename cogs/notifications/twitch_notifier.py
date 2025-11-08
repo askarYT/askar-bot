@@ -9,9 +9,6 @@ from twitchAPI.helper import first
 from twitchAPI.twitch import Twitch
 from datetime import datetime, timezone
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 class TwitchNotifier(commands.Cog):
     def __init__(self, bot):
         self.bot = bot

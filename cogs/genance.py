@@ -6,9 +6,6 @@ import os
 import logging
 import re
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 # Liste des mots gênants et des points attribués
 GENANCE_WORDS = {
     "feur": 5,

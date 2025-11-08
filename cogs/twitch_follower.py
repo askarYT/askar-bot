@@ -7,9 +7,6 @@ import logging
 from twitchAPI.twitch import Twitch
 from twitchAPI.helper import first
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 class TwitchFollower(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
