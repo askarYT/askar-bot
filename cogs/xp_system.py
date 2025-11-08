@@ -87,7 +87,7 @@ class XPSystem(commands.Cog):
             logging.error(f"Erreur lors de la récupération des données d'utilisateur : {e}")
             return {"user_id": user_id, "xp": 0, "level": 1}
 
-    def update_user_data(self, user_id, xp_amount, source):
+    def update_user_data(self, user_id, user_name, xp_amount, source):
         """Mise à jour synchrone des données d'XP et retourne les niveaux."""
         try:
             user_data = self.get_user_data(user_id)
@@ -102,7 +102,7 @@ class XPSystem(commands.Cog):
                 upsert=True
             )
             
-            logging.info(f"+{xp_amount} XP pour {user_id} (source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
+            logging.info(f"🔹 {xp_amount:+} XP pour {user_name} (ID: {user_id}) (Source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
             return old_level, new_level
         except Exception as e:
             logging.error(f"Erreur lors de la mise à jour des données d'XP : {e}")
@@ -190,7 +190,7 @@ class XPSystem(commands.Cog):
         
         self.last_message_xp[user_id] = now
         xp_gained = random.randint(XP_LIMITS["message"]["min"], XP_LIMITS["message"]["max"])
-        old_level, new_level = self.update_user_data(user_id, xp_gained, source="Message")
+        old_level, new_level = self.update_user_data(user_id, message.author.name, xp_gained, source="Message")
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
 
@@ -212,7 +212,7 @@ class XPSystem(commands.Cog):
 
         self.reaction_tracking[message_id].add(user_id)
         xp_gained = random.randint(XP_LIMITS["reaction"]["min"], XP_LIMITS["reaction"]["max"])
-        old_level, new_level = self.update_user_data(user_id, xp_gained, source="Réaction")
+        old_level, new_level = self.update_user_data(user_id, user.name, xp_gained, source="Réaction")
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
 
@@ -250,11 +250,11 @@ class XPSystem(commands.Cog):
                 current_channel = member.voice.channel
                 human_members = [m for m in current_channel.members if not m.bot]
                 if len(human_members) < 2:
-                    logging.debug(f"Gain d'XP vocal sauté pour {member.display_name} (ID: {member.id}) (seul dans le salon).")
+                    logging.warning(f"Gain d'XP vocal sauté pour {member.display_name} (ID: {member.id}) (seul dans le salon).")
                     continue # On saute ce cycle de gain d'XP
 
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
-                old_level, new_level = self.update_user_data(str(member.id), xp_gained, source="Vocal")
+                old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
                 if old_level is not None and new_level > old_level:
                     await self.handle_level_up(str(member.id), old_level, new_level)
 
@@ -294,8 +294,9 @@ class XPSystem(commands.Cog):
         try:
             old_level, new_level = self.update_user_data(
                 str(user.id), 
+                user.name,
                 xp_amount, 
-                source=f"Manuel (par {interaction.user.display_name})"
+                source=f"Manuel (par {interaction.user.name} | {interaction.user.id})"
             )
             if old_level is not None and new_level > old_level:
                 await self.handle_level_up(str(user.id), old_level, new_level)
@@ -315,8 +316,9 @@ class XPSystem(commands.Cog):
         try:
             old_level, new_level = self.update_user_data(
                 str(user.id), 
+                user.name,
                 -xp_amount, 
-                source=f"Manuel (par {interaction.user.display_name})"
+                source=f"Manuel (par {interaction.user.name} | {interaction.user.id})"
             )
             if old_level is not None and new_level > old_level:
                 await self.handle_level_up(str(user.id), old_level, new_level)
