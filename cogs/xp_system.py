@@ -401,7 +401,6 @@ class XPSystem(commands.Cog):
             await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
 
     @set_command_level.autocomplete("command")
-    @remove_command_level.autocomplete("command")
     async def command_autocomplete(self, interaction: discord.Interaction, current: str):
         """Fournit une liste des commandes du bot pour l'auto-complétion."""
         commands = [
@@ -409,6 +408,17 @@ class XPSystem(commands.Cog):
             if cmd.name.startswith(current)  # Filtrer les commandes qui commencent par `current`
         ]
         return [app_commands.Choice(name=cmd, value=cmd) for cmd in commands[:25]]
+
+    @remove_command_level.autocomplete("command")
+    async def protected_command_autocomplete(self, interaction: discord.Interaction, current: str):
+        """Propose uniquement les commandes qui ont une restriction de niveau."""
+        protected_commands = self.command_levels_collection.find({
+            "command": {"$regex": f"^{current}", "$options": "i"}
+        }).limit(25)
+        return [
+            app_commands.Choice(name=doc['command'], value=doc['command'])
+            for doc in protected_commands
+        ]
 
     @app_commands.command(name="set-level-role", description="Assigne un rôle à donner à partir d'un niveau.")
     @app_commands.describe(level="Le niveau à atteindre", role="Le rôle à donner")
