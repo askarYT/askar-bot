@@ -126,9 +126,9 @@ class XPSystem(commands.Cog):
                     if member and role and role not in member.roles:
                         try:
                             await member.add_roles(role, reason=f"Atteint le niveau {level_role['level']}")
-                            logging.info(f"Rôle '{role.name}' attribué à {member.display_name} (ID: {member.id}) pour avoir atteint le niveau {level_role['level']}.")
+                            logging.info(f"Rôle '{role.name}' attribué à {member.name} (ID: {member.id}) pour avoir atteint le niveau {level_role['level']}.")
                         except discord.Forbidden:
-                            logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.display_name} (ID: {member.id}).")
+                            logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.name} (ID: {member.id}).")
                         except Exception as e:
                             logging.error(f"Erreur lors de l'attribution du rôle : {e}")
 
@@ -223,35 +223,30 @@ class XPSystem(commands.Cog):
         if member.bot:
             return
 
-        # Si l'utilisateur rejoint un salon vocal
-        if after.channel and after.channel != before.channel:
-            if self.is_channel_ignored(after.channel.id):
-                return
-            
-            # Vérifier tous les membres du salon pour démarrer les minuteurs si nécessaire
-            human_members = [m for m in after.channel.members if not m.bot]
-            if len(human_members) >= 2:
-                for m in human_members:
-                    if str(m.id) not in self.vocal_timers:
-                        self.vocal_timers[str(m.id)] = self.start_vocal_timer(m)
-                        logging.info(f"Minuteur XP vocal démarré pour {m.display_name} (ID: {m.id}) car le salon est actif.")
+        # Après chaque mouvement, on met à jour l'état des deux salons concernés.
+        # Cela simplifie grandement la logique pour tous les cas (rejoindre, quitter, changer).
+        await self.update_channel_timers(before.channel)
+        if before.channel != after.channel:
+            await self.update_channel_timers(after.channel)
 
-        # Si l'utilisateur quitte un salon vocal (ou change de salon)
-        if before.channel and before.channel != after.channel:
-            # Annuler le minuteur de la personne qui part
-            if str(member.id) in self.vocal_timers:
-                self.vocal_timers[str(member.id)].cancel()
-                del self.vocal_timers[str(member.id)]
-                logging.info(f"Minuteur XP vocal arrêté pour {member.display_name} (ID: {member.id}) car il/elle a quitté.")
+    async def update_channel_timers(self, channel: discord.VoiceChannel):
+        """Analyse un salon et démarre ou arrête les minuteurs d'XP en fonction du nombre de membres."""
+        if not channel or self.is_channel_ignored(channel.id):
+            return
 
-            # Si le salon qu'il a quitté devient inactif (1 personne ou moins)
-            human_members_before = [m for m in before.channel.members if not m.bot]
-            if len(human_members_before) < 2:
-                for m in human_members_before: # Pour la personne restante
-                    if str(m.id) in self.vocal_timers:
-                        self.vocal_timers[str(m.id)].cancel()
-                        del self.vocal_timers[str(m.id)]
-                        logging.info(f"Minuteur XP vocal arrêté pour {m.display_name} (ID: {m.id}) car le salon est devenu inactif.")
+        human_members = [m for m in channel.members if not m.bot]
+
+        if len(human_members) >= 2: # Le salon est ACTIF
+            for member in human_members:
+                if str(member.id) not in self.vocal_timers:
+                    self.vocal_timers[str(member.id)] = self.start_vocal_timer(member)
+                    logging.info(f"Minuteur XP vocal DÉMARRÉ pour {member.name} (ID: {member.id}) dans le salon '{channel.name}'.")
+        else: # Le salon est INACTIF
+            for member in human_members: # Concerne la personne seule restante
+                if str(member.id) in self.vocal_timers:
+                    self.vocal_timers[str(member.id)].cancel()
+                    del self.vocal_timers[str(member.id)]
+                    logging.info(f"Minuteur XP vocal ARRÊTÉ pour {member.name} (ID: {member.id}) car le salon '{channel.name}' est devenu inactif.")
 
     def start_vocal_timer(self, member):
         """Démarre un timer pour ajouter de l'XP toutes les minutes."""
@@ -265,7 +260,7 @@ class XPSystem(commands.Cog):
                 current_channel = member.voice.channel
                 human_members = [m for m in current_channel.members if not m.bot]
                 if len(human_members) < 2:
-                    logging.warning(f"Gain d'XP vocal sauté pour {member.display_name} (ID: {member.id}) (seul dans le salon).")
+                    logging.info(f"Gain d'XP vocal sauté pour {member.name} (ID: {member.id}) (seul dans le salon).")
                     continue # On saute ce cycle de gain d'XP
 
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
@@ -477,9 +472,9 @@ class XPSystem(commands.Cog):
                     if role and level >= role_entry["level"] and role not in member.roles:
                         try:
                             await member.add_roles(role, reason="Resynchronisation automatique des rôles par niveau")
-                            logging.info(f"Rôle '{role.name}' réattribué à {member.display_name} (ID: {member.id}) (niveau {level}) via resync.")
+                            logging.info(f"Rôle '{role.name}' réattribué à {member.name} (ID: {member.id}) (niveau {level}) via resync.")
                         except discord.Forbidden:
-                            logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.display_name} (ID: {member.id}) via resync.")
+                            logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.name} (ID: {member.id}) via resync.")
                         except Exception as e:
                             logging.error(f"Erreur lors de la réattribution automatique du rôle : {e}")
 
@@ -511,7 +506,7 @@ class XPSystem(commands.Cog):
                 if role and level >= role_entry["level"] and role not in member.roles:
                     try:
                         await member.add_roles(role, reason="Synchronisation manuelle des rôles")
-                        logging.info(f"Rôle '{role.name}' attribué à {member.display_name} (ID: {member.id}) via resync manuel.")
+                        logging.info(f"Rôle '{role.name}' attribué à {member.name} (ID: {member.id}) via resync manuel.")
                         count += 1
                     except Exception as e:
                         logging.error(f"Erreur lors de la synchronisation manuelle des rôles : {e}")
