@@ -1,12 +1,11 @@
 import discord
 from discord import app_commands, Role
 from discord.ext import commands, tasks
+from pymongo import MongoClient
+from datetime import datetime, timedelta
 import random
 import logging
 import os
-import asyncio
-from pymongo import MongoClient # type: ignore
-from datetime import datetime, timedelta
 import math
 
 # Configuration des logs
@@ -24,24 +23,26 @@ class XPSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # Utilisation d'une variable d'environnement pour sécuriser l'URI MongoDB
+        # --- Connexion à la base de données ---
         self.mongo_uri = os.getenv("MONGO_URI")
         if not self.mongo_uri:
-            logging.error("Erreur : URI MongoDB non configurée dans les variables d'environnement.")
+            logging.error("Cog 'XPSystem': Erreur critique : URI MongoDB non configurée.")
             raise ValueError("La variable d'environnement MONGO_URI est obligatoire.")
         
         try:
             self.client = MongoClient(self.mongo_uri)
             self.db = self.client["askar_bot"]
-            self.collection = self.db["xp_data"]
-            logging.info("Connexion à MongoDB réussie.")
+            self.xp_collection = self.db["xp_data"]
+            self.level_roles_collection = self.db["level_roles"]
+            self.ignored_channels_collection = self.db["ignored_channels"]
+            self.command_levels_collection = self.db["command_levels"] # Nouvelle collection pour les permissions par niveau
+            logging.info("Cog 'XPSystem': Connexion à MongoDB réussie.")
         except Exception as e:
-            logging.error(f"Erreur lors de la connexion à MongoDB : {e}")
+            logging.error(f"Cog 'XPSystem': Erreur lors de la connexion à MongoDB : {e}")
             raise
-        
-        # Dictionnaire pour suivre les timers des salons vocaux
-        self.vocal_timers = {}
-        # Dictionnaire pour limiter les gains d'XP par message ou réaction
+
+        # Dictionnaires en mémoire pour la gestion des cooldowns et états
+        self.vocal_timers = {} # {user_id: task}
         self.last_message_xp = {}
         self.reaction_tracking = {}
 
@@ -49,77 +50,74 @@ class XPSystem(commands.Cog):
         # Démarre la tâche de resynchronisation des rôles toutes les 15 minutes
         self.sync_roles_task.start()
 
-        self.level_roles = self.db["level_roles"]
+    def cog_unload(self):
+        """Annule les tâches lorsque le cog est déchargé."""
+        self.sync_roles_task.cancel()
+        for timer in self.vocal_timers.values():
+            timer.cancel()
 
     def get_user_data(self, user_id):
         """Récupère les données d'XP et de niveau d'un utilisateur depuis MongoDB."""
         try:
-            user_data = self.collection.find_one({"user_id": user_id})
+            user_data = self.xp_collection.find_one({"user_id": user_id})
             if not user_data:
-                user_data = {"user_id": user_id, "xp": 0, "level": 1}
-                self.collection.insert_one(user_data)
-                logging.info(f"Création de données pour l'utilisateur {user_id}.")
+                return {"user_id": user_id, "xp": 0, "level": 1}
             return user_data
         except Exception as e:
             logging.error(f"Erreur lors de la récupération des données d'utilisateur : {e}")
             return {"user_id": user_id, "xp": 0, "level": 1}
 
     def update_user_data(self, user_id, xp_amount, source):
-        """Mise à jour des données d'XP et de niveau d'un utilisateur."""
+        """Mise à jour synchrone des données d'XP et retourne les niveaux."""
         try:
             user_data = self.get_user_data(user_id)
-            logging.debug(f"Données utilisateur récupérées : {user_data}") # Debug récupération de données
             old_level = user_data["level"]
             new_xp = user_data["xp"] + xp_amount
             new_level = self.calculate_level(new_xp)
-            logging.debug(f"XP actuel : {new_xp}, Nouveau niveau calculé : {new_level}") # Debug calcul niveau
-
-            """Vérification si l'utilisateur possède les données"""
-            if not user_data:
-                user_data = {"xp": 0, "level": 0}  # Valeurs par défaut si l'utilisateur n'existe pas
 
             # Mise à jour des données d'XP et de niveau
-            result = self.collection.update_one(
+            self.xp_collection.update_one(
                 {"user_id": user_id},
                 {"$set": {"xp": new_xp, "level": new_level}},
                 upsert=True
             )
-            if result.modified_count == 0 and result.upserted_id is None:
-                logging.warning(f"La mise à jour pour l'utilisateur {user_id} n'a pas été effectuée.")
-
-            # Vérification si l'utilisateur a monté de niveau
-
-                # Vérifie s'il existe un rôle configuré pour ce niveau
-                level_role = self.level_roles.find_one({"level": new_level})
-                if level_role and "role_id" in level_role:
-                    guild = discord.utils.get(self.bot.guilds, id=level_role["guild_id"])
-                    if guild:
-                        member = guild.get_member(int(user_id))
-                        role = guild.get_role(level_role["role_id"])
-                        if member and role and role not in member.roles:
-                            try:
-                                member.add_roles(role, reason=f"Atteint le niveau {new_level}")
-                                logging.info(f"Rôle {role.name} attribué à {member.name} pour avoir atteint le niveau {new_level}.")
-                            except Exception as e:
-                                logging.error(f"Erreur lors de l'attribution du rôle : {e}")
-            if new_level > old_level:
-                logging.info(f"L'utilisateur {user_id} a atteint le niveau {new_level}.")
-
-                # Envoi d'un message privé pour notifier l'utilisateur
-                user = self.bot.get_user(int(user_id))
-                #if user:
-                #    try:
-                #        asyncio.create_task(
-                #            user.send(f"Félicitations ! 🎉 Tu as atteint le **niveau {new_level}** ! Continue comme ça ! 🚀")
-                #        )
-                #    except Exception as e:
-                #        logging.error(f"Impossible d'envoyer un MP à l'utilisateur {user_id} : {e}")
-            else:
-                logging.info(f"Ajout de {xp_amount} XP pour l'utilisateur {user_id} (source : {source}). Nouveau niveau : {new_level}.")
-
+            
+            logging.info(f"Ajout de {xp_amount} XP pour l'utilisateur {user_id} (source : {source}). Nouveau niveau : {new_level}.")
+            return old_level, new_level
         except Exception as e:
             logging.error(f"Erreur lors de la mise à jour des données d'XP : {e}")
-            logging.error(f"Erreur lors de la mise à jour des données d'XP (user_id : {user_id}, xp_amount : {xp_amount}, source : {source}) : {e}")
+            return None, None
+
+    async def handle_level_up(self, user_id, old_level, new_level):
+        """Gère les actions asynchrones lors d'un gain de niveau."""
+        if new_level <= old_level:
+            return
+
+        logging.info(f"L'utilisateur {user_id} a atteint le niveau {new_level}.")
+
+        # Attribuer les rôles
+        all_level_roles = self.level_roles_collection.find({"guild_id": {"$exists": True}})
+        for level_role in all_level_roles:
+            if old_level < level_role["level"] <= new_level:
+                guild = self.bot.get_guild(level_role["guild_id"])
+                if guild:
+                    member = guild.get_member(int(user_id))
+                    role = guild.get_role(level_role["role_id"])
+                    if member and role and role not in member.roles:
+                        try:
+                            await member.add_roles(role, reason=f"Atteint le niveau {level_role['level']}")
+                            logging.info(f"Rôle '{role.name}' attribué à {member.display_name} pour avoir atteint le niveau {level_role['level']}.")
+                        except discord.Forbidden:
+                            logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.display_name}.")
+                        except Exception as e:
+                            logging.error(f"Erreur lors de l'attribution du rôle : {e}")
+
+        # Envoyer un message privé (si activé)
+        user = self.bot.get_user(int(user_id))
+        if user:
+            # La logique de notification peut être ajoutée ici.
+            # ex: await user.send(f"Félicitations ! 🎉 Tu as atteint le niveau {new_level} !")
+            pass
 
     def calculate_level(self, xp):
         """Calcule le niveau d'un utilisateur en fonction de son XP."""
@@ -129,7 +127,7 @@ class XPSystem(commands.Cog):
 
     def is_channel_ignored(self, channel_id):
         """Vérifie si un salon est ignoré pour les gains d'XP."""
-        ignored_channel = self.db["ignored_channels"].find_one({"channel_id": channel_id})
+        ignored_channel = self.ignored_channels_collection.find_one({"channel_id": channel_id})
         return ignored_channel is not None
 
     def has_command_permission(self, command_name, user):
@@ -139,16 +137,18 @@ class XPSystem(commands.Cog):
             if command_name in ["xp"]:
                 return True
             
-            # Récupérer les rôles configurés pour la commande
-            command_roles = self.db["command_roles"].find_one({"command": command_name})
+            # Vérification par niveau
+            command_level_req = self.command_levels_collection.find_one({"command": command_name})
             
-            # Si aucun rôle n'est configuré, bloquer l'accès
-            if not command_roles or "roles" not in command_roles:
-                return False  # Bloqué par défaut
-            
-            # Vérifie si l'utilisateur a l'un des rôles autorisés
-            user_roles = [role.id for role in user.roles]
-            return any(role in user_roles for role in command_roles["roles"])
+            # S'il n'y a pas de restriction de niveau, la commande est autorisée par défaut.
+            if not command_level_req:
+                return True
+
+            # Si une restriction existe, on vérifie le niveau de l'utilisateur
+            user_data = self.get_user_data(str(user.id))
+            user_level = user_data.get("level", 1)
+            required_level = command_level_req.get("level", float('inf')) # Niveau infini si non défini
+            return user_level >= required_level
         except Exception as e:
             logging.error(f"Erreur lors de la vérification des permissions pour la commande {command_name} : {e}")
             return False
@@ -168,7 +168,9 @@ class XPSystem(commands.Cog):
         
         self.last_message_xp[user_id] = now
         xp_gained = random.randint(XP_LIMITS["message"]["min"], XP_LIMITS["message"]["max"])
-        self.update_user_data(user_id, xp_gained, source="Message")
+        old_level, new_level = self.update_user_data(user_id, xp_gained, source="Message")
+        if old_level is not None and new_level > old_level:
+            await self.handle_level_up(user_id, old_level, new_level)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
@@ -188,7 +190,9 @@ class XPSystem(commands.Cog):
 
         self.reaction_tracking[message_id].add(user_id)
         xp_gained = random.randint(XP_LIMITS["reaction"]["min"], XP_LIMITS["reaction"]["max"])
-        self.update_user_data(user_id, xp_gained, source="Réaction")
+        old_level, new_level = self.update_user_data(user_id, xp_gained, source="Réaction")
+        if old_level is not None and new_level > old_level:
+            await self.handle_level_up(user_id, old_level, new_level)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -216,11 +220,15 @@ class XPSystem(commands.Cog):
         """Démarre un timer pour ajouter de l'XP toutes les minutes."""
         async def add_vocal_xp():
             while True:
-                await discord.utils.sleep_until(datetime.utcnow() + timedelta(seconds=60))
+                await asyncio.sleep(60)
                 if not member.voice or not member.voice.channel:  # Vérifie si l'utilisateur est encore en vocal
                     break
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
-                self.update_user_data(str(member.id), xp_gained, source="Vocal")
+                old_level, new_level = self.update_user_data(str(member.id), xp_gained, source="Vocal")
+                if old_level is not None and new_level > old_level:
+                    await self.handle_level_up(str(member.id), old_level, new_level)
+
+        import asyncio
 
         return self.bot.loop.create_task(add_vocal_xp())
 
@@ -234,7 +242,7 @@ class XPSystem(commands.Cog):
             return
 
         try:
-            # Préviens Discord que la réponse est différée si nécessaire
+            # La réponse est éphémère, pas besoin de defer si le traitement est rapide.
             await interaction.response.defer(ephemeral=True)
 
             target_user = user if user else interaction.user
@@ -247,16 +255,10 @@ class XPSystem(commands.Cog):
             xp_next_level = math.ceil((level + 1) ** (1 / XP_LIMITS["levels"]["multiplicator"]))
 
             # Envoie la réponse finale
-            if user:
-                await interaction.followup.send(
-                    f"L'XP de {target_user.mention} : **{xp} XP** et il est niveau **{level}**.\n"
-                    f"XP nécessaire pour le niveau suivant : **{xp_next_level - xp} XP**."
-                )
-            else:
-                await interaction.followup.send(
-                    f"{interaction.user.mention}, tu as actuellement **{xp} XP** et tu es niveau **{level}**.\n"
-                    f"XP nécessaire pour le niveau suivant : **{xp_next_level - xp} XP**."
-                )
+            await interaction.followup.send(
+                f"**{target_user.display_name}** est au **niveau {level}** avec **{xp} XP**.\n"
+                f"Il manque **{xp_next_level - xp} XP** pour le prochain niveau."
+            )
         except discord.errors.NotFound:
             logging.error("L'interaction n'est plus valide ou a expiré.")
         except Exception as e:
@@ -273,11 +275,14 @@ class XPSystem(commands.Cog):
             return
         
         try:
-            self.update_user_data(
+            old_level, new_level = self.update_user_data(
                 str(user.id), 
                 xp_amount, 
                 source=f"Manuel (par {interaction.user.display_name})"
             )
+            if old_level is not None and new_level > old_level:
+                await self.handle_level_up(str(user.id), old_level, new_level)
+
             await interaction.response.send_message(
                 f"Ajout de {xp_amount} XP à {user.mention} (par {interaction.user.mention}).", ephemeral=True
             )
@@ -296,11 +301,14 @@ class XPSystem(commands.Cog):
             return
         
         try:
-            self.update_user_data(
+            old_level, new_level = self.update_user_data(
                 str(user.id), 
                 -xp_amount, 
                 source=f"Manuel (par {interaction.user.display_name})"
             )
+            if old_level is not None and new_level > old_level:
+                await self.handle_level_up(str(user.id), old_level, new_level)
+
             await interaction.response.send_message(
                 f"Retrait de {xp_amount} XP à {user.mention} (par {interaction.user.mention}).", ephemeral=True
             )
@@ -319,7 +327,7 @@ class XPSystem(commands.Cog):
             return
 
         try:
-            self.db["ignored_channels"].update_one(
+            self.ignored_channels_collection.update_one(
                 {"channel_id": channel.id},
                 {"$set": {"channel_id": channel.id}},
                 upsert=True
@@ -340,80 +348,58 @@ class XPSystem(commands.Cog):
             return
 
         try:
-            self.db["ignored_channels"].delete_one({"channel_id": channel.id})
+            self.ignored_channels_collection.delete_one({"channel_id": channel.id})
             await interaction.response.send_message(f"Le salon {channel.mention} n'est plus ignoré pour les gains d'XP.", ephemeral=True)
         except Exception as e:
             logging.error(f"Erreur lors de la suppression du salon ignoré : {e}")
             await interaction.response.send_message("Une erreur est survenue lors de la suppression du salon de la liste ignorée.", ephemeral=True)
 
-    @app_commands.command(name="set-command-role", description="Définit un rôle autorisé à utiliser une commande du bot.")
-    @app_commands.describe(command="La commande à configurer.", role="Le rôle à autoriser.")
-    async def set_command_role(self, interaction: discord.Interaction, command: str, role: discord.Role):
-        """Définit un rôle autorisé pour une commande spécifique."""
-        try:
-            # Vérifier si l'utilisateur est administrateur
-            #if not interaction.user.guild_permissions.administrator:
-            #    await interaction.response.send_message(
-            #        "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            #    )
-            #    return
+    @app_commands.command(name="set-command-level", description="Définit le niveau minimum requis pour utiliser une commande.")
+    @app_commands.describe(command="La commande à configurer.", level="Le niveau minimum requis.")
+    async def set_command_level(self, interaction: discord.Interaction, command: str, level: int):
+        """Définit un niveau minimum requis pour une commande spécifique."""
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Tu dois être administrateur pour utiliser cette commande.", ephemeral=True)
+            return
+        
+        if level <= 0:
+            await interaction.response.send_message("Le niveau doit être supérieur à 0.", ephemeral=True)
+            return
 
-            # Ajouter le rôle dans MongoDB
-            self.db["command_roles"].update_one(
+        try:
+            self.command_levels_collection.update_one(
                 {"command": command},
-                {"$addToSet": {"roles": role.id}},  # Ajoute le rôle uniquement s'il n'existe pas déjà
+                {"$set": {"level": level}},
                 upsert=True
             )
-
-            # Réponse à l'utilisateur
             await interaction.response.send_message(
-                f"Le rôle {role.mention} a été autorisé pour la commande `{command}`.",
+                f"Le niveau **{level}** est maintenant requis pour utiliser la commande `/{command}`.",
                 ephemeral=True
             )
         except Exception as e:
-            logging.error(f"Erreur lors de la configuration des rôles pour la commande {command} : {e}")
-            await interaction.response.send_message(
-                "Une erreur est survenue lors de la configuration du rôle.", ephemeral=True
-            )
+            logging.error(f"Erreur lors de la configuration du niveau pour la commande {command}: {e}")
+            await interaction.response.send_message("Une erreur est survenue lors de la configuration du niveau.", ephemeral=True)
 
+    @app_commands.command(name="remove-command-level", description="Supprime la restriction de niveau pour une commande.")
+    @app_commands.describe(command="La commande dont la restriction doit être supprimée.")
+    async def remove_command_level(self, interaction: discord.Interaction, command: str):
+        """Supprime la restriction de niveau pour une commande."""
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("Tu dois être administrateur pour utiliser cette commande.", ephemeral=True)
+            return
 
-    @app_commands.command(name="remove-command-role", description="Retire un rôle autorisé à utiliser une commande du bot.")
-    @app_commands.describe(command="La commande à configurer.", role="Le rôle à retirer.")
-    async def remove_command_role(self, interaction: discord.Interaction, command: str, role: discord.Role):
-        """Retire un rôle autorisé pour une commande spécifique."""
         try:
-            # Vérifier si l'utilisateur est administrateur
-            #if not interaction.user.guild_permissions.administrator:
-            #    await interaction.response.send_message(
-            #        "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            #    )
-            #    return
-
-            # Retirer le rôle dans MongoDB
-            result = self.db["command_roles"].update_one(
-                {"command": command},
-                {"$pull": {"roles": role.id}}  # Supprime ce rôle de la liste
-            )
-
-            # Vérifier si un rôle a été effectivement retiré
-            if result.modified_count > 0:
-                await interaction.response.send_message(
-                    f"Le rôle {role.mention} a été retiré des autorisations pour la commande `{command}`.",
-                    ephemeral=True
-                )
+            result = self.command_levels_collection.delete_one({"command": command})
+            if result.deleted_count > 0:
+                await interaction.response.send_message(f"La restriction de niveau pour la commande `/{command}` a été supprimée.", ephemeral=True)
             else:
-                await interaction.response.send_message(
-                    f"Aucun rôle trouvé à retirer pour la commande `{command}`.",
-                    ephemeral=True
-                )
+                await interaction.response.send_message(f"Aucune restriction de niveau n'était configurée pour la commande `/{command}`.", ephemeral=True)
         except Exception as e:
-            logging.error(f"Erreur lors de la suppression d'un rôle pour la commande {command} : {e}")
-            await interaction.response.send_message(
-                "Une erreur est survenue lors du retrait du rôle.", ephemeral=True
-            )
+            logging.error(f"Erreur lors de la suppression de la restriction de niveau pour {command}: {e}")
+            await interaction.response.send_message("Une erreur est survenue.", ephemeral=True)
 
-    @set_command_role.autocomplete("command")
-    @remove_command_role.autocomplete("command")
+    @set_command_level.autocomplete("command")
+    @remove_command_level.autocomplete("command")
     async def command_autocomplete(self, interaction: discord.Interaction, current: str):
         """Fournit une liste des commandes du bot pour l'auto-complétion."""
         commands = [
@@ -429,7 +415,7 @@ class XPSystem(commands.Cog):
             await interaction.response.send_message("Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True)
             return
         try:
-            self.level_roles.update_one(
+            self.level_roles_collection.update_one(
                 {"level": level, "guild_id": interaction.guild.id},
                 {"$set": {"level": level, "role_id": role.id, "guild_id": interaction.guild.id}},
                 upsert=True
@@ -446,7 +432,7 @@ class XPSystem(commands.Cog):
     @tasks.loop(minutes=15)
     async def sync_roles_task(self):
         for guild in self.bot.guilds:
-            level_roles = list(self.level_roles.find({"guild_id": guild.id}))
+            level_roles = list(self.level_roles_collection.find({"guild_id": guild.id}))
             if not level_roles:
                 continue
 
@@ -462,9 +448,15 @@ class XPSystem(commands.Cog):
                     if role and level >= role_entry["level"] and role not in member.roles:
                         try:
                             await member.add_roles(role, reason="Resynchronisation automatique des rôles par niveau")
-                            logging.info(f"Rôle {role.name} réattribué à {member.name} (niveau {level})")
+                            logging.info(f"Rôle '{role.name}' réattribué à {member.display_name} (niveau {level}) via resync.")
+                        except discord.Forbidden:
+                            logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.display_name} via resync.")
                         except Exception as e:
                             logging.error(f"Erreur lors de la réattribution automatique du rôle : {e}")
+
+    @sync_roles_task.before_loop
+    async def before_sync_roles(self):
+        await self.bot.wait_until_ready()
 
     @app_commands.command(name="resync-roles", description="Force la resynchronisation des rôles par niveau pour tous les membres.")
     async def resync_roles(self, interaction: discord.Interaction):
@@ -474,7 +466,7 @@ class XPSystem(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
-        level_roles = list(self.level_roles.find({"guild_id": guild.id}))
+        level_roles = list(self.level_roles_collection.find({"guild_id": guild.id}))
         if not level_roles:
             await interaction.followup.send("Aucun rôle par niveau n'a été configuré pour ce serveur.")
             return
@@ -490,6 +482,7 @@ class XPSystem(commands.Cog):
                 if role and level >= role_entry["level"] and role not in member.roles:
                     try:
                         await member.add_roles(role, reason="Synchronisation manuelle des rôles")
+                        logging.info(f"Rôle '{role.name}' attribué à {member.display_name} via resync manuel.")
                         count += 1
                     except Exception as e:
                         logging.error(f"Erreur lors de la synchronisation manuelle des rôles : {e}")
