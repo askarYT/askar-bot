@@ -4,6 +4,7 @@ from discord import app_commands
 from pymongo import MongoClient # type: ignore
 import os
 import logging
+from .xp_system import has_xp_permission # Importe le décorateur
 import re
 
 # Liste des mots gênants et des points attribués
@@ -145,8 +146,10 @@ class GenanceSystem(commands.Cog):
                 break  # Arrêter après le premier mot gênant détecté
 
     @app_commands.command(name="genance", description="Consulte les points de gênance d'un utilisateur.")
+    @has_xp_permission() # Applique la vérification de permission
     async def genance(self, interaction: discord.Interaction, member: discord.Member = None):
         """Affiche les points de gênance d'un utilisateur via une commande slash."""
+
         member = member or interaction.user
         user_id = str(member.id)
         user_data = self.get_user_data(user_id)

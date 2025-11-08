@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from .xp_system import has_xp_permission
 
 class BugReport(commands.Cog):
     def __init__(self, bot):
@@ -9,6 +10,7 @@ class BugReport(commands.Cog):
 
     @app_commands.command(name="report-bug", description="Signaler un bug.")
     @app_commands.describe(bug_name="Nom du bug en quelques mots (exemple : Problème de connexion, Erreur en lobby, etc.)")
+    @has_xp_permission()
     async def report_bug(self, interaction: discord.Interaction, bug_name: str):
         """Ouvre une modal pour signaler un bug."""
         class BugReportModal(discord.ui.Modal, title=f"Signaler un bug: {bug_name}"):

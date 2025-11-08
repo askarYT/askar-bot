@@ -1,12 +1,14 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from .xp_system import has_xp_permission
 
 class Rename(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(name="rename", description="Renommer un message du bot en spécifiant l'ID du message.")
+    @has_xp_permission()
     async def rename(self, interaction: discord.Interaction, message_id: str):
         """Command to rename a bot's message by its ID."""
         try:
@@ -62,6 +64,7 @@ class Message(commands.Cog):
         self.bot = bot
 
     @app_commands.command(name="message", description="Envoyer un message dans le salon via une modal.")
+    @has_xp_permission()
     async def message(self, interaction: discord.Interaction):
         """Ouvre une modal pour permettre d'envoyer un message dans le salon."""
 

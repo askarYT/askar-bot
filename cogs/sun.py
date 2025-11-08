@@ -2,12 +2,14 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
+from .xp_system import has_xp_permission
 
 class SunGame(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @app_commands.command(name="soleil", description="Joue à 1, 2, 3, SOLEIL!")
+    @has_xp_permission()
     async def soleil(self, interaction: discord.Interaction):
         """
         Commande /soleil : Affiche un compte à rebours avec l'édition du message.

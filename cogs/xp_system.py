@@ -129,27 +129,50 @@ class XPSystem(commands.Cog):
         return ignored_channel is not None
 
     def has_command_permission(self, command_name, user):
-        """Vérifie si l'utilisateur a la permission d'utiliser une commande."""
+        """Vérifie si l'utilisateur a la permission d'utiliser une commande. Retourne (bool, required_level)."""
         try:
             # Exceptions pour certaines commandes accessibles à tous
             if command_name in ["xp"]:
-                return True
+                return True, 0
             
             # Vérification par niveau
             command_level_req = self.command_levels_collection.find_one({"command": command_name})
             
             # S'il n'y a pas de restriction de niveau, la commande est autorisée par défaut.
             if not command_level_req:
-                return True
+                return True, 0
 
             # Si une restriction existe, on vérifie le niveau de l'utilisateur
             user_data = self.get_user_data(str(user.id))
             user_level = user_data.get("level", 1)
             required_level = command_level_req.get("level", float('inf')) # Niveau infini si non défini
-            return user_level >= required_level
+            is_allowed = user_level >= required_level
+            return is_allowed, required_level
         except Exception as e:
             logging.error(f"Erreur lors de la vérification des permissions pour la commande {command_name} : {e}")
-            return False
+            return False, float('inf')
+
+    def has_xp_permission():
+        """
+        Décorateur de permission personnalisé pour les commandes d'application.
+        Vérifie si l'utilisateur a le niveau requis pour utiliser la commande.
+        """
+        async def predicate(interaction: discord.Interaction) -> bool:
+            # Récupère le cog XPSystem depuis l'instance du bot
+            xp_cog = interaction.client.get_cog('XPSystem')
+            command_name = interaction.command.name
+
+            if not xp_cog:
+                return False # Ne devrait jamais arriver si le bot est bien lancé
+
+            is_allowed, required_level = xp_cog.has_command_permission(command_name, interaction.user)
+            if not is_allowed:
+                await interaction.response.send_message(
+                    f"❌ Tu n'as pas le niveau requis pour utiliser cette commande. (Niveau **{required_level}** requis)", ephemeral=True
+                )
+                return False
+            return True
+        return app_commands.check(predicate)
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -239,12 +262,6 @@ class XPSystem(commands.Cog):
     @app_commands.command(name="xp", description="Affiche l'XP et le niveau d'un utilisateur.")
     async def check_xp(self, interaction: discord.Interaction, user: discord.Member = None):
         """Commande slash pour vérifier l'XP et le niveau d'un utilisateur."""
-        if not self.has_command_permission("xp", interaction.user):
-            await interaction.response.send_message(
-                "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            )
-            return
-
         try:
             # On diffère la réponse pour avoir le temps de calculer, en mode non-éphémère (visible par tous).
             await interaction.response.defer(ephemeral=False)
@@ -270,14 +287,9 @@ class XPSystem(commands.Cog):
 
     @app_commands.command(name="xp-add", description="Ajoute de l'XP à un utilisateur.")
     @app_commands.describe(user="L'utilisateur à modifier.", xp_amount="Montant d'XP à ajouter.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def add_xp(self, interaction: discord.Interaction, user: discord.Member, xp_amount: int):
-        """Ajoute de l'XP à un utilisateur."""
-        if not self.has_command_permission("xp-add", interaction.user):
-            await interaction.response.send_message(
-                "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            )
-            return
-        
+        """Ajoute de l'XP à un utilisateur (Admin seulement)."""
         try:
             old_level, new_level = self.update_user_data(
                 str(user.id), 
@@ -296,14 +308,9 @@ class XPSystem(commands.Cog):
 
     @app_commands.command(name="xp-remove", description="Retire de l'XP à un utilisateur.")
     @app_commands.describe(user="L'utilisateur à modifier.", xp_amount="Montant d'XP à retirer.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def remove_xp(self, interaction: discord.Interaction, user: discord.Member, xp_amount: int):
-        """Retire de l'XP à un utilisateur."""
-        if not self.has_command_permission("xp-remove", interaction.user):
-            await interaction.response.send_message(
-                "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            )
-            return
-        
+        """Retire de l'XP à un utilisateur (Admin seulement)."""
         try:
             old_level, new_level = self.update_user_data(
                 str(user.id), 
@@ -322,14 +329,9 @@ class XPSystem(commands.Cog):
 
     @app_commands.command(name="ignore-channel", description="Ajoute un salon (textuel ou vocal) à la liste des salons ignorés pour les gains d'XP.")
     @app_commands.describe(channel="Le salon (textuel ou vocal) à ignorer.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def ignore_channel(self, interaction: discord.Interaction, channel: discord.abc.GuildChannel):
-        """Ajoute un salon (textuel ou vocal) à la liste des salons ignorés."""
-        if not self.has_command_permission("ignore-channel", interaction.user):
-            await interaction.response.send_message(
-                "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            )
-            return
-
+        """Ajoute un salon (textuel ou vocal) à la liste des salons ignorés (Admin seulement)."""
         try:
             self.ignored_channels_collection.update_one(
                 {"channel_id": channel.id},
@@ -343,14 +345,9 @@ class XPSystem(commands.Cog):
 
     @app_commands.command(name="unignore-channel", description="Supprime un salon (textuel ou vocal) de la liste des salons ignorés pour les gains d'XP.")
     @app_commands.describe(channel="Le salon (textuel ou vocal) à ne plus ignorer.")
+    @app_commands.checks.has_permissions(administrator=True)
     async def unignore_channel(self, interaction: discord.Interaction, channel: discord.abc.GuildChannel):
-        """Supprime un salon (textuel ou vocal) de la liste des salons ignorés."""
-        if not self.has_command_permission("unignore-channel", interaction.user):
-            await interaction.response.send_message(
-                "Tu n'as pas la permission d'utiliser cette commande.", ephemeral=True
-            )
-            return
-
+        """Supprime un salon (textuel ou vocal) de la liste des salons ignorés (Admin seulement)."""
         try:
             self.ignored_channels_collection.delete_one({"channel_id": channel.id})
             await interaction.response.send_message(f"Le salon {channel.mention} n'est plus ignoré pour les gains d'XP.", ephemeral=True)

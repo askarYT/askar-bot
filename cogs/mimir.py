@@ -2,6 +2,7 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
+from .xp_system import has_xp_permission
 
 class Mimir(commands.Cog):
     def __init__(self, bot):
@@ -14,6 +15,7 @@ class Mimir(commands.Cog):
         ]
 
     @app_commands.command(name="mimir", description="Envoie un message de souhait de sommeil avec un GIF aléatoire.")
+    @has_xp_permission()
     async def mimir(self, interaction: discord.Interaction, pseudo: discord.User = None):
         # Si aucun utilisateur n'est spécifié, utiliser l'utilisateur qui exécute la commande
         if not pseudo:
