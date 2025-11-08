@@ -102,7 +102,7 @@ class XPSystem(commands.Cog):
                 upsert=True
             )
             
-            logging.info(f"🔹 {xp_amount:+} XP pour {user_name} (ID: {user_id}) (Source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
+            # logging.info(f"🔹 {xp_amount:+} XP pour {user_name} (ID: {user_id}) (Source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
             return old_level, new_level
         except Exception as e:
             logging.error(f"Erreur lors de la mise à jour des données d'XP : {e}")
@@ -224,19 +224,34 @@ class XPSystem(commands.Cog):
             return
 
         # Si l'utilisateur rejoint un salon vocal
-        if after.channel and not before.channel:
-            if self.is_channel_ignored(after.channel.id):  # Vérifie si le salon est ignoré
+        if after.channel and after.channel != before.channel:
+            if self.is_channel_ignored(after.channel.id):
                 return
-            if user_id not in self.vocal_timers:
-                # Démarrer un timer pour cet utilisateur
-                self.vocal_timers[user_id] = self.start_vocal_timer(member)
+            
+            # Vérifier tous les membres du salon pour démarrer les minuteurs si nécessaire
+            human_members = [m for m in after.channel.members if not m.bot]
+            if len(human_members) >= 2:
+                for m in human_members:
+                    if str(m.id) not in self.vocal_timers:
+                        self.vocal_timers[str(m.id)] = self.start_vocal_timer(m)
+                        logging.info(f"Minuteur XP vocal démarré pour {m.display_name} (ID: {m.id}) car le salon est actif.")
 
-        # Si l'utilisateur quitte le salon vocal
-        elif not after.channel and before.channel:
-            if user_id in self.vocal_timers:
-                # Annuler le timer de cet utilisateur
-                self.vocal_timers[user_id].cancel()
-                del self.vocal_timers[user_id]
+        # Si l'utilisateur quitte un salon vocal (ou change de salon)
+        if before.channel and before.channel != after.channel:
+            # Annuler le minuteur de la personne qui part
+            if str(member.id) in self.vocal_timers:
+                self.vocal_timers[str(member.id)].cancel()
+                del self.vocal_timers[str(member.id)]
+                logging.info(f"Minuteur XP vocal arrêté pour {member.display_name} (ID: {member.id}) car il/elle a quitté.")
+
+            # Si le salon qu'il a quitté devient inactif (1 personne ou moins)
+            human_members_before = [m for m in before.channel.members if not m.bot]
+            if len(human_members_before) < 2:
+                for m in human_members_before: # Pour la personne restante
+                    if str(m.id) in self.vocal_timers:
+                        self.vocal_timers[str(m.id)].cancel()
+                        del self.vocal_timers[str(m.id)]
+                        logging.info(f"Minuteur XP vocal arrêté pour {m.display_name} (ID: {m.id}) car le salon est devenu inactif.")
 
     def start_vocal_timer(self, member):
         """Démarre un timer pour ajouter de l'XP toutes les minutes."""
