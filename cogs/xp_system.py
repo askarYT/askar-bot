@@ -7,6 +7,7 @@ import random
 import logging
 import os
 import math
+import asyncio
 
 # Définition des limites d'XP/LVL pour chaque type d'interaction
 XP_LIMITS = {
@@ -233,8 +234,6 @@ class XPSystem(commands.Cog):
                 if old_level is not None and new_level > old_level:
                     await self.handle_level_up(str(member.id), old_level, new_level)
 
-        import asyncio
-
         return self.bot.loop.create_task(add_vocal_xp())
 
     @app_commands.command(name="xp", description="Affiche l'XP et le niveau d'un utilisateur.")
@@ -247,8 +246,8 @@ class XPSystem(commands.Cog):
             return
 
         try:
-            # La réponse est éphémère, pas besoin de defer si le traitement est rapide.
-            await interaction.response.defer(ephemeral=True)
+            # On diffère la réponse pour avoir le temps de calculer, en mode non-éphémère (visible par tous).
+            await interaction.response.defer(ephemeral=False)
 
             target_user = user if user else interaction.user
             user_id = str(target_user.id)
