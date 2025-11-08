@@ -256,13 +256,6 @@ class XPSystem(commands.Cog):
                 if not member.voice or not member.voice.channel:  # Vérifie si l'utilisateur est encore en vocal
                     break
 
-                # Vérifie le nombre de membres humains dans le salon vocal
-                current_channel = member.voice.channel
-                human_members = [m for m in current_channel.members if not m.bot]
-                if len(human_members) < 2:
-                    logging.info(f"Gain d'XP vocal sauté pour {member.name} (ID: {member.id}) (seul dans le salon).")
-                    continue # On saute ce cycle de gain d'XP
-
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
                 old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
                 if old_level is not None and new_level > old_level:
