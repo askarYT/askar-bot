@@ -57,6 +57,16 @@ class MyBot(commands.Bot):
         command_name = ctx.command.qualified_name
         user = ctx.author
         logging.info(f"Commande '{ctx.prefix}{command_name}' utilisée par {user} (ID: {user.id})")
+        
+    async def on_tree_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Gestionnaire d'erreurs global pour les commandes d'application."""
+        # Si l'erreur est une CheckFailure (permission refusée), on l'ignore silencieusement.
+        # Le message d'erreur est déjà envoyé à l'utilisateur par le décorateur.
+        if isinstance(error, app_commands.CheckFailure):
+            logging.debug(f"Permission refusée pour la commande '/{interaction.command.name}' par {interaction.user}.")
+            return
+        # Pour toutes les autres erreurs, on affiche le traceback complet.
+        logging.error(f"Une erreur non gérée est survenue pour la commande '/{interaction.command.name}':", exc_info=error)
 
 intents = discord.Intents.all()
 bot = MyBot(command_prefix='.', intents=intents)
