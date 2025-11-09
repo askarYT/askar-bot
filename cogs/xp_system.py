@@ -48,7 +48,7 @@ class XPSystem(commands.Cog):
         if not self.mongo_uri:
             logging.error("Cog 'XPSystem': Erreur critique : URI MongoDB non configurée.")
             raise ValueError("La variable d'environnement MONGO_URI est obligatoire.")
-        
+
         try:
             self.client = MongoClient(self.mongo_uri)
             self.db = self.client["askar_bot"]
@@ -62,17 +62,19 @@ class XPSystem(commands.Cog):
             raise
 
         # Dictionnaires en mémoire pour la gestion des cooldowns et états
+        self.vocal_timers = {} # {user_id: task}
         self.last_message_xp = {}
         self.reaction_tracking = {}
 
+        # Collection pour les rôles par niveau
         # Démarre la tâche de resynchronisation des rôles toutes les 15 minutes
         self.sync_roles_task.start()
-        self.distribute_vocal_xp_task.start() # Démarrage de la nouvelle tâche pour l'XP vocale
 
     def cog_unload(self):
         """Annule les tâches lorsque le cog est déchargé."""
         self.sync_roles_task.cancel()
-        self.distribute_vocal_xp_task.cancel()
+        for timer in self.vocal_timers.values():
+            timer.cancel()
 
     def get_user_data(self, user_id):
         """Récupère les données d'XP et de niveau d'un utilisateur depuis MongoDB."""
@@ -99,8 +101,8 @@ class XPSystem(commands.Cog):
                 {"$set": {"xp": new_xp, "level": new_level}},
                 upsert=True
             )
-            
-            # logging.info(f"🔹 {xp_amount:+} XP pour {user_name} (ID: {user_id}) (Source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
+
+            logging.info(f"🔹 {xp_amount:+} XP pour {user_name} (ID: {user_id}) (source: {source}) | Total: {new_xp} XP | Niveau: {new_level}")
             return old_level, new_level
         except Exception as e:
             logging.error(f"Erreur lors de la mise à jour des données d'XP : {e}")
@@ -154,10 +156,10 @@ class XPSystem(commands.Cog):
             # Exceptions pour certaines commandes accessibles à tous
             if command_name in ["xp"]:
                 return True, 0
-            
+
             # Vérification par niveau
             command_level_req = self.command_levels_collection.find_one({"command": command_name})
-            
+
             # S'il n'y a pas de restriction de niveau, la commande est autorisée par défaut.
             if not command_level_req:
                 return True, 0
@@ -178,14 +180,14 @@ class XPSystem(commands.Cog):
         """Ajoute de l'XP lorsqu'un utilisateur envoie un message(si le salon n'est pas ignoré)."""
         if message.author.bot or self.is_channel_ignored(message.channel.id):
             return
-        
+
         user_id = str(message.author.id)
         now = datetime.utcnow()
 
         # Ajout d'un délai minimum entre les gains d'XP pour les messages
         if user_id in self.last_message_xp and now - self.last_message_xp[user_id] < timedelta(seconds=60):
             return
-        
+
         self.last_message_xp[user_id] = now
         xp_gained = random.randint(XP_LIMITS["message"]["min"], XP_LIMITS["message"]["max"])
         old_level, new_level = self.update_user_data(user_id, message.author.name, xp_gained, source="Message")
@@ -197,14 +199,14 @@ class XPSystem(commands.Cog):
         """Ajoute de l'XP lorsqu'un utilisateur réagit à un message (si le salon n'est pas ignoré)."""
         if user.bot or self.is_channel_ignored(reaction.message.channel.id):
             return
-        
+
         message_id = str(reaction.message.id)
         user_id = str(user.id)
 
         # Empêcher de gagner de l'XP plusieurs fois pour la même réaction/message
         if message_id in self.reaction_tracking and user_id in self.reaction_tracking[message_id]:
             return
-        
+
         if message_id not in self.reaction_tracking:
             self.reaction_tracking[message_id] = set()
 
@@ -217,26 +219,39 @@ class XPSystem(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         """Ajoute de l'XP lorsqu'un utilisateur est actif dans un salon vocal."""
-        # Cette fonction est maintenant vide car la logique est gérée par une tâche de fond.
-        # On la garde pour d'éventuelles futures fonctionnalités liées aux états vocaux.
-        pass
+        user_id = str(member.id)
+        if member.bot:
+            return
 
-    @tasks.loop(seconds=60)
-    async def distribute_vocal_xp_task(self):
-        """Tâche de fond qui distribue l'XP vocale toutes les minutes."""
-        for guild in self.bot.guilds:
-            for channel in guild.voice_channels:
-                if self.is_channel_ignored(channel.id):
-                    continue
+        # Si l'utilisateur rejoint un salon vocal
+        if after.channel and not before.channel:
+            if self.is_channel_ignored(after.channel.id):  # Vérifie si le salon est ignoré
+                return
+            if user_id not in self.vocal_timers:
+                # Démarrer un timer pour cet utilisateur
+                self.vocal_timers[user_id] = self.start_vocal_timer(member)
 
-                human_members = [m for m in channel.members if not m.bot]
+        # Si l'utilisateur quitte le salon vocal
+        elif not after.channel and before.channel:
+            if user_id in self.vocal_timers:
+                # Annuler le timer de cet utilisateur
+                self.vocal_timers[user_id].cancel()
+                del self.vocal_timers[user_id]
 
-                if len(human_members) >= 2:
-                    xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
-                    for member in human_members:
-                        old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
-                        if old_level is not None and new_level > old_level:
-                            await self.handle_level_up(str(member.id), old_level, new_level)
+    def start_vocal_timer(self, member):
+        """Démarre un timer pour ajouter de l'XP toutes les minutes."""
+        async def add_vocal_xp():
+            while True:
+                await asyncio.sleep(60)
+                if not member.voice or not member.voice.channel:  # Vérifie si l'utilisateur est encore en vocal
+                    break
+
+                xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
+                old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
+                if old_level is not None and new_level > old_level:
+                    await self.handle_level_up(str(member.id), old_level, new_level)
+
+        return self.bot.loop.create_task(add_vocal_xp())
 
     @app_commands.command(name="xp", description="Affiche l'XP et le niveau d'un utilisateur.")
     async def check_xp(self, interaction: discord.Interaction, user: discord.Member = None):
@@ -343,7 +358,7 @@ class XPSystem(commands.Cog):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("Tu dois être administrateur pour utiliser cette commande.", ephemeral=True)
             return
-        
+
         if level <= 0:
             await interaction.response.send_message("Le niveau doit être supérieur à 0.", ephemeral=True)
             return
@@ -419,10 +434,6 @@ class XPSystem(commands.Cog):
         except Exception as e:
             logging.error(f"Erreur lors de l'enregistrement du rôle pour le niveau {level} : {e}")
             await interaction.response.send_message("Erreur lors de la configuration du rôle pour ce niveau.", ephemeral=True)
-
-    @distribute_vocal_xp_task.before_loop
-    async def before_distribute_vocal_xp(self):
-        await self.bot.wait_until_ready()
 
 
     @tasks.loop(minutes=15)
