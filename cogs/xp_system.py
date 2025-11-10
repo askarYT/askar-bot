@@ -311,7 +311,7 @@ class XPSystem(commands.Cog):
 
             # Envoie la réponse finale
             await interaction.followup.send(
-                f"**{target_user.display_name}** est au **niveau {level}** avec **{xp} XP**.\n"
+                f"`{target_user.name}` est au **niveau {level}** avec *{xp} XP*.\n"
                 f"Il manque **{xp_next_level - xp} XP** pour le prochain niveau."
             )
         except discord.errors.NotFound:
