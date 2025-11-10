@@ -66,9 +66,15 @@ class XPSystem(commands.Cog):
         self.last_message_xp = {}
         self.reaction_tracking = {}
 
+        # Variable pour s'assurer que la resynchronisation ne se fait qu'une fois
+        self.initial_sync_done = False
+
         # Collection pour les rôles par niveau
         # Démarre la tâche de resynchronisation des rôles toutes les 15 minutes
         self.sync_roles_task.start()
+
+        # Lance la resynchronisation des niveaux au démarrage
+        self.bot.loop.create_task(self.resync_levels_on_startup())
 
     def cog_unload(self):
         """Annule les tâches lorsque le cog est déchargé."""
@@ -148,6 +154,35 @@ class XPSystem(commands.Cog):
         level = math.floor(math.sqrt(xp / XP_LIMITS["levels"]["coefficient"]))
         return max(1, level)
 
+    async def resync_levels_on_startup(self):
+        """
+        Au démarrage du bot, parcourt tous les utilisateurs et recalcule leur niveau
+        en fonction de leur XP actuel pour assurer la cohérence avec la formule de niveau.
+        """
+        await self.bot.wait_until_ready()
+
+        if self.initial_sync_done:
+            return
+
+        logging.info("Démarrage de la resynchronisation des niveaux de tous les utilisateurs...")
+        
+        all_users = self.xp_collection.find({})
+        updated_count = 0
+
+        for user_data in all_users:
+            user_id = user_data["user_id"]
+            current_xp = user_data.get("xp", 0)
+            current_level = user_data.get("level", 1)
+            
+            correct_level = self.calculate_level(current_xp)
+
+            if current_level != correct_level:
+                self.xp_collection.update_one({"user_id": user_id}, {"$set": {"level": correct_level}})
+                logging.info(f"Resync: Utilisateur {user_id} mis à jour du niveau {current_level} au niveau {correct_level}.")
+                updated_count += 1
+        
+        logging.info(f"Resynchronisation des niveaux terminée. {updated_count} utilisateurs mis à jour.")
+        self.initial_sync_done = True
 
     def is_channel_ignored(self, channel_id):
         """Vérifie si un salon est ignoré pour les gains d'XP."""
