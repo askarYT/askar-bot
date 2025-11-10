@@ -14,7 +14,7 @@ XP_LIMITS = {
     "message": {"min": 4, "max": 12},   # XP pour les messages
     "vocal": {"min": 5, "max": 11},     # XP pour les salons vocaux
     "reaction": {"min": 2, "max": 6},   # XP pour les réactions
-    "levels": {"multiplicator": 0.22},  # Multiplicateur pour lvl-up
+    "levels": {"coefficient": 250},  # Coefficient pour la nouvelle formule de niveau
 }
 
 def has_xp_permission():
@@ -141,9 +141,13 @@ class XPSystem(commands.Cog):
 
     def calculate_level(self, xp):
         """Calcule le niveau d'un utilisateur en fonction de son XP."""
-        # Exemple ajusté : augmenter le taux en utilisant un exposant légèrement inférieur à 0.5
-        level = math.floor(xp ** XP_LIMITS["levels"]["multiplicator"])  # Ajuster ici le diviseur et l'exposant
-        return level
+        if xp <= 0:
+            return 1
+        # Nouvelle formule quadratique : level = sqrt(xp / coefficient)
+        # On retourne au minimum le niveau 1.
+        level = math.floor(math.sqrt(xp / XP_LIMITS["levels"]["coefficient"]))
+        return max(1, level)
+
 
     def is_channel_ignored(self, channel_id):
         """Vérifie si un salon est ignoré pour les gains d'XP."""
@@ -250,6 +254,7 @@ class XPSystem(commands.Cog):
                 old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
                 if old_level is not None and new_level > old_level:
                     await self.handle_level_up(str(member.id), old_level, new_level)
+                    await self.handle_level_up(str(member.id), member.name, old_level, new_level)
 
         return self.bot.loop.create_task(add_vocal_xp())
 
@@ -267,7 +272,7 @@ class XPSystem(commands.Cog):
             level = user_data.get("level", 1)
 
             # Calcul de l'XP nécessaire pour passer au niveau suivant
-            xp_next_level = math.ceil((level + 1) ** (1 / XP_LIMITS["levels"]["multiplicator"]))
+            xp_next_level = XP_LIMITS["levels"]["coefficient"] * ((level + 1) ** 2)
 
             # Envoie la réponse finale
             await interaction.followup.send(
