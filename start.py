@@ -42,7 +42,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
-        for extension in ['random','ping','mimir','poke','sun','xp_system','notifications.youtube_notifier', 'notifications.twitch_notifier', 'twitch_follower']:
+        for extension in ['random','ping','mimir','poke','sun','xp_system','notifications.youtube_notifier', 'notifications.twitch_notifier', 'twitch_follower', 'server.join_server', 'server.leave_server', 'moderation.kick', 'moderation.ban', 'moderation.softban', 'moderation.tempban', 'moderation.unban', 'moderation.warn', 'logs.log_core', 'logs.events_messages', 'logs.events_server', 'logs.events_members']:
             await self.load_extension(f'cogs.{extension}')
             logging.info(f'Loaded: cogs.{extension}')
 

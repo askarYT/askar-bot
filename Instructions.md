@@ -22,6 +22,8 @@ Le code est organisé en `cogs` (modules) situés dans le dossier `cogs/`. Chaqu
 - **`status.py`**: Gestion du statut et de l'activité du bot.
 - **`messages.py`**: Commandes pour envoyer/éditer des messages via le bot.
 - **`random.py`**, **`mimir.py`**: Commandes diverses et amusantes.
+- **`server/join_server.py`**: Gestion des messages de bienvenue.
+- **`server/leave_server.py`**: Gestion des messages de départ.
 
 ## 3. Technologies et Dépendances
 
@@ -41,9 +43,13 @@ Le code est organisé en `cogs` (modules) situés dans le dossier `cogs/`. Chaqu
 - **Langue** : Le code (commentaires, noms de variables) est un mélange de français et d'anglais. **Les messages destinés aux utilisateurs Discord doivent impérativement être en français.**
 - **Formatage** : Le code suit globalement les conventions PEP 8. Maintiens ce style.
 - **Logging** : Le module `logging` est utilisé pour tracer les informations, erreurs et avertissements. Continue de l'utiliser pour les messages système.
-- **Commandes** : Privilégier les commandes d'application (`app_commands`) pour les nouvelles fonctionnalités.
+- **Commandes** : Privilégier les commandes d'application (`app_commands`) pour les nouvelles fonctionnalités. **La configuration du logging se fait exclusivement dans `start.py`. Les cogs doivent simplement importer `logging` et l'utiliser directement (`logging.info(...)`, etc.) sans jamais appeler `logging.basicConfig()`.**
 - **Sécurité** : Les informations sensibles (token du bot, URI MongoDB, clés API) sont stockées dans des variables d'environnement. Ne jamais les écrire en dur dans le code.
-- **Robustesse** : Utiliser des blocs `try...except` pour gérer les erreurs potentielles (appels API, accès à la base de données, permissions Discord manquantes).
+- **Robustesse** : Utiliser des blocs `try...except` pour gérer les erreurs potentielles (appels API, accès à la base de données, permissions Discord manquantes). 
+- **Permissions** : La gestion des permissions est centralisée dans `xp_system.py`. Par défaut, toute nouvelle commande doit être protégée par le décorateur `@has_xp_permission()` (à importer depuis `cogs.xp_system`). Les exceptions sont :
+  - Les commandes destinées à être utilisées par tout le monde (ex: `/xp`, `/ping`), qui n'auront aucun décorateur de permission.
+  - Les commandes strictement administratives (ex: `/set-command-level`), qui doivent utiliser `@app_commands.checks.has_permissions(administrator=True)`.
+  - Toute autre exception spécifiée par toi.
 
 ## 5. Points d'Attention Particuliers
 
@@ -70,8 +76,8 @@ Cette section liste toutes les commandes d'application (`/`) disponibles, class�
 - `/xp-remove <user> <xp_amount>`: Retire de l'XP à un utilisateur.
 - `/ignore-channel <channel>`: Ajoute un salon (textuel ou vocal) à la liste des salons ignorés pour les gains d'XP.
 - `/unignore-channel <channel>`: Supprime un salon (textuel ou vocal) de la liste des salons ignorés pour les gains d'XP.
-- `/set-command-role <command> <role>`: Définit un rôle autorisé à utiliser une commande du bot.
-- `/remove-command-role <command> <role>`: Retire un rôle autorisé à utiliser une commande du bot.
+- `/set-command-level <command> <level>`: Définit le niveau minimum requis pour utiliser une commande.
+- `/remove-command-level <command>`: Supprime la restriction de niveau pour une commande.
 - `/set-level-role <level> <role>`: Assigne un rôle à donner à partir d'un certain niveau.
 - `/resync-roles`: Force la resynchronisation des rôles par niveau pour tous les membres.
 
@@ -116,6 +122,14 @@ Cette section liste toutes les commandes d'application (`/`) disponibles, class�
 - `/alerts-add <platform> <channel_identifier> <content_type>`: Ajouter une alerte.
 - `/alerts-set-role <platform> <channel_identifier> <content_type> <role>`: Définir un rôle pour une alerte.
 - `/alerts-set-channel <platform> <channel_identifier> <channel>`: Définir le salon des notifications pour une alerte.
+
+### `server/join_server.py`
+- `/set-join-channel <channel>`: Définit le salon pour les messages de bienvenue.
+- `/test-join`: Teste le message de bienvenue.
+
+### `server/leave_server.py`
+- `/set-leave-channel <channel>`: Définit le salon pour les messages de départ.
+- `/test-leave`: Teste le message de départ.
 
 ### `ping.py`
 - `/ping`: Affiche la latence du bot.

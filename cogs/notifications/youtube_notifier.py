@@ -9,9 +9,6 @@ from datetime import datetime, timezone
 import googleapiclient.discovery
 import googleapiclient.errors
 
-# Configuration des logs
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 class YouTubeMessageModal(ui.Modal):
     def __init__(self, parent_cog, channel_name: str, current_video_message: str, current_short_message: str):
         super().__init__(title=f"Messages pour {channel_name}")
@@ -169,44 +166,30 @@ class YouTubeNotifier(commands.Cog):
                     if not discord_channel:
                         continue
 
-                    # Sélectionner le rôle et le message appropriés
-                    if is_short:
-                        role_id = alert.get('short_role_id')
-                        custom_message = alert.get('custom_short_message')
-                        default_message = f"**{channel_name}** a publié un nouveau Short ! 🎬 {{mention}}"
-                    else:
-                        role_id = alert.get('video_role_id')
-                        custom_message = alert.get('custom_video_message')
-                        default_message = f"**{channel_name}** a publié une nouvelle vidéo ! 📹 {{mention}}"
-
+                    # Construire le message de notification
+                    role_id = alert.get('short_role_id') if is_short else alert.get('video_role_id')
                     role = discord_channel.guild.get_role(role_id) if role_id else None
-                    role_mention = role.mention if role else ""
+                    role_mention = f"-# {role.mention}" if role else ""
 
-                    if custom_message:
-                        content_message = custom_message.format(channel=channel_name, mention=role_mention)
+                    custom_message_template = alert.get('custom_short_message') if is_short else alert.get('custom_video_message')
+
+                    if is_short:
+                        link_text = "Short"
+                        default_message = f"**{channel_name}** a publié un nouveau [**{link_text}**]({video_url}) ! 🎬"
                     else:
-                        content_message = default_message.format(mention=role_mention)
+                        link_text = "Vidéo"
+                        default_message = f"**{channel_name}** a publié une nouvelle [**{link_text}**]({video_url}) ! 📹"
 
-                    content_message = content_message.strip()
+                    if custom_message_template:
+                        # Le placeholder {mention} est remplacé par le texte formaté du rôle
+                        content_message = custom_message_template.format(channel=channel_name, mention=role_mention)
+                    else:
+                        content_message = f"{default_message}\n{role_mention}"
 
-                    if discord_channel:
-                        embed = discord.Embed(
-                            title=video_title,
-                            url=video_url,
-                            description=(latest_video["snippet"]["description"][:200] + "...") if latest_video["snippet"]["description"] else "Pas de description.",
-                            color=discord.Color.red()
-                        )
-                        thumbnail_url = latest_video["snippet"]["thumbnails"].get("high", {}).get("url")
-                        if thumbnail_url:
-                            embed.set_image(url=thumbnail_url)
-                        embed.set_author(name=channel_name, url=f"https://www.youtube.com/channel/{channel_id}")
-                        embed.set_footer(text=f"Nouveau contenu YouTube : {video_type}")
-                        embed.timestamp = datetime.fromisoformat(latest_video["snippet"]["publishedAt"].replace("Z", "+00:00"))
-
-                        try:
-                            await discord_channel.send(content=f"{content_message}\n{video_url}", embed=embed)
-                        except discord.Forbidden:
-                            logging.warning(f"Permission manquante pour envoyer un message dans le salon {discord_channel.id}")
+                    try:
+                        await discord_channel.send(content=content_message.strip())
+                    except discord.Forbidden:
+                        logging.warning(f"Permission manquante pour envoyer un message dans le salon {discord_channel.id}")
 
             except googleapiclient.errors.HttpError as e:
                 logging.error(f"Erreur API YouTube pour {channel_name}: {e}")
@@ -409,54 +392,35 @@ class YouTubeNotifier(commands.Cog):
             logging.warning(f"Impossible de récupérer les infos de la chaîne pour le test de {channel_name}: {e}")
             profile_pic_url = None
 
+        # --- Construction des messages de test ---
         try:
             # --- Test pour une VIDÉO ---
-            video_url = f"https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Lien de test
             video_role = interaction.guild.get_role(alert.get('video_role_id')) if alert.get('video_role_id') else None
-            video_role_text = f"@{video_role.name}" if video_role else ""
-            custom_video_message = alert.get('custom_video_message')
-            
-            if custom_video_message:
-                video_content = custom_video_message.format(channel=channel_name, mention=video_role_text).strip()
-            else:
-                video_content = f"**{channel_name}** a publié une nouvelle vidéo ! 📹 {video_role_text}".strip()
+            video_role_mention = f"-# {video_role.mention}" if video_role else ""
+            custom_video_message_template = alert.get('custom_video_message')
 
-            video_embed = discord.Embed(
-                title="[TEST] Titre de la vidéo de test",
-                url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}",
-                description="Ceci est la description d'une vidéo de test.",
-                color=discord.Color.red()
-            )
-            if profile_pic_url:
-                video_embed.set_thumbnail(url=profile_pic_url)
-            video_embed.set_author(name=channel_name, url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}")
-            video_embed.set_footer(text="Nouveau contenu YouTube : Vidéo (Test)")
-            video_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(content=f"{video_content}\n{video_url}", embed=video_embed)
+            if custom_video_message_template:
+                video_content = custom_video_message_template.format(channel=channel_name, mention=video_role_mention)
+            else:
+                video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Lien de test
+                default_video_message = f"**{channel_name}** a publié une nouvelle [**Vidéo**]({video_url}) ! 📹 (Ceci est un test)"
+                video_content = f"{default_video_message}\n{video_role_mention}"
+
+            await channel.send(content=video_content.strip())
 
             # --- Test pour un SHORT ---
-            short_url = f"https://www.youtube.com/shorts/c_n_F5j6_eA" # Lien de test
             short_role = interaction.guild.get_role(alert.get('short_role_id')) if alert.get('short_role_id') else None
-            short_role_text = f"@{short_role.name}" if short_role else ""
-            custom_short_message = alert.get('custom_short_message')
+            short_role_mention = f"-# {short_role.mention}" if short_role else ""
+            custom_short_message_template = alert.get('custom_short_message')
 
-            if custom_short_message:
-                short_content = custom_short_message.format(channel=channel_name, mention=short_role_text).strip()
+            if custom_short_message_template:
+                short_content = custom_short_message_template.format(channel=channel_name, mention=short_role_mention)
             else:
-                short_content = f"**{channel_name}** a publié un nouveau Short ! 🎬 {short_role_text}".strip()
+                short_url = "https://www.youtube.com/shorts/c_n_F5j6_eA" # Lien de test
+                default_short_message = f"**{channel_name}** a publié un nouveau [**Short**]({short_url}) ! 🎬 (Ceci est un test)"
+                short_content = f"{default_short_message}\n{short_role_mention}"
 
-            short_embed = discord.Embed(
-                title="[TEST] Titre du Short de test",
-                url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}",
-                description="Ceci est la description d'un Short de test.",
-                color=discord.Color.red()
-            )
-            if profile_pic_url:
-                short_embed.set_thumbnail(url=profile_pic_url)
-            short_embed.set_author(name=channel_name, url=f"https://www.youtube.com/channel/{alert['youtube_channel_id']}")
-            short_embed.set_footer(text="Nouveau contenu YouTube : Short (Test)")
-            short_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(content=f"{short_content}\n{short_url}", embed=short_embed)
+            await channel.send(content=short_content.strip())
 
             await interaction.followup.send(f"✅ Notifications de test pour **{channel_name}** envoyées dans {channel.mention}.")
 
