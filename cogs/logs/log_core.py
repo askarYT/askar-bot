@@ -10,9 +10,14 @@ from datetime import datetime
 LOG_EVENTS = [
     "ban", "kick", "warn", "unban", "softban", "tempban",  # Sanctions
     "message_delete", "message_edit",                      # Messages
-    "member_join", "member_leave", "member_update",        # Membres
+    "member_join", "member_leave", "member_update",        # Membres (General)
+    "member_role_update",                                  # Membres (Rôles)
     "channel_create", "channel_delete", "channel_update",  # Salons
-    "role_create", "role_delete", "role_update"            # Rôles
+    "role_create", "role_delete", "role_update",           # Rôles Serveur
+    "guild_update", "automod_update",                      # Serveur
+    "voice_join", "voice_leave", "voice_move",             # Vocal
+    "xp_gain",                                             # XP
+    "command_use"                                          # Commandes
 ]
 
 class LogCore(commands.Cog):

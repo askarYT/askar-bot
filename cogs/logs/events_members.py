@@ -36,5 +36,21 @@ class EventsMembers(commands.Cog):
             log_core = self.bot.get_cog("LogCore")
             if log_core: await log_core.send_log(after.guild, "member_update", embed)
 
+        # Changement de rôles
+        if before.roles != after.roles:
+            added_roles = [role for role in after.roles if role not in before.roles]
+            removed_roles = [role for role in before.roles if role not in after.roles]
+            
+            if added_roles or removed_roles:
+                embed = discord.Embed(title="👤 Rôles Modifiés", description=f"{after.mention}", color=discord.Color.blue())
+                if added_roles:
+                    embed.add_field(name="Rôles Ajoutés", value=", ".join([r.mention for r in added_roles]), inline=False)
+                if removed_roles:
+                    embed.add_field(name="Rôles Retirés", value=", ".join([r.mention for r in removed_roles]), inline=False)
+                embed.set_footer(text=f"ID: {after.id}")
+                
+                log_core = self.bot.get_cog("LogCore")
+                if log_core: await log_core.send_log(after.guild, "member_role_update", embed)
+
 async def setup(bot):
     await bot.add_cog(EventsMembers(bot))

@@ -139,6 +139,14 @@ class XPSystem(commands.Cog):
                             logging.error(f"Erreur lors de l'attribution du rôle : {e}")
 
         # Envoyer un message privé (si activé)
+        # --- LOGGING XP LEVEL UP ---
+        log_core = self.bot.get_cog("LogCore")
+        if log_core:
+            guild = self.bot.get_guild(int(list(self.level_roles_collection.find({"guild_id": {"$exists": True}}))[0]["guild_id"])) if self.bot.guilds else None
+            # Note: Récupérer la guild est complexe ici car user_id est global. On essaie de logger si on trouve une guild commune ou via le contexte d'appel.
+            # Pour simplifier, on ne log le level up que si on a le contexte (via on_message c'est possible, ici c'est plus dur).
+            pass 
+
         user = self.bot.get_user(int(user_id))
         if user:
             # La logique de notification peut être ajoutée ici.
@@ -232,6 +240,13 @@ class XPSystem(commands.Cog):
         old_level, new_level = self.update_user_data(user_id, message.author.name, xp_gained, source="Message")
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
+            # Log Level Up
+            log_core = self.bot.get_cog("LogCore")
+            if log_core:
+                embed = discord.Embed(title="🆙 Level Up !", description=f"{message.author.mention} est passé au niveau **{new_level}** !", color=discord.Color.gold())
+                embed.add_field(name="Ancien Niveau", value=str(old_level), inline=True)
+                embed.add_field(name="Nouveau Niveau", value=str(new_level), inline=True)
+                await log_core.send_log(message.guild, "xp_gain", embed)
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
@@ -254,6 +269,12 @@ class XPSystem(commands.Cog):
         old_level, new_level = self.update_user_data(user_id, user.name, xp_gained, source="Réaction")
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
+            # Log Level Up (Réaction)
+            log_core = self.bot.get_cog("LogCore")
+            if log_core:
+                embed = discord.Embed(title="🆙 Level Up !", description=f"{user.mention} est passé au niveau **{new_level}** !", color=discord.Color.gold())
+                embed.add_field(name="Source", value="Réaction", inline=True)
+                await log_core.send_log(reaction.message.guild, "xp_gain", embed)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
@@ -290,6 +311,13 @@ class XPSystem(commands.Cog):
                 if old_level is not None and new_level > old_level:
                     await self.handle_level_up(str(member.id), old_level, new_level)
                     await self.handle_level_up(str(member.id), member.name, old_level, new_level)
+                    # Log Level Up (Vocal)
+                    log_core = self.bot.get_cog("LogCore")
+                    if log_core:
+                        embed = discord.Embed(title="🆙 Level Up !", description=f"{member.mention} est passé au niveau **{new_level}** !", color=discord.Color.gold())
+                        embed.add_field(name="Source", value="Vocal", inline=True)
+                        await log_core.send_log(member.guild, "xp_gain", embed)
+
 
         return self.bot.loop.create_task(add_vocal_xp())
 
@@ -333,6 +361,14 @@ class XPSystem(commands.Cog):
             )
             if old_level is not None and new_level > old_level:
                 await self.handle_level_up(str(user.id), old_level, new_level)
+            
+            # Log Admin Action
+            log_core = self.bot.get_cog("LogCore")
+            if log_core:
+                embed = discord.Embed(title="📈 XP Ajouté (Admin)", description=f"{xp_amount} XP ajoutés à {user.mention}", color=discord.Color.green())
+                embed.add_field(name="Admin", value=interaction.user.mention, inline=True)
+                embed.add_field(name="Nouveau Niveau", value=str(new_level), inline=True)
+                await log_core.send_log(interaction.guild, "xp_gain", embed)
 
             await interaction.response.send_message(
                 f"Ajout de {xp_amount} XP à {user.mention} (par {interaction.user.mention}).", ephemeral=True
@@ -355,6 +391,14 @@ class XPSystem(commands.Cog):
             )
             if old_level is not None and new_level > old_level:
                 await self.handle_level_up(str(user.id), old_level, new_level)
+
+            # Log Admin Action
+            log_core = self.bot.get_cog("LogCore")
+            if log_core:
+                embed = discord.Embed(title="📉 XP Retiré (Admin)", description=f"{xp_amount} XP retirés à {user.mention}", color=discord.Color.red())
+                embed.add_field(name="Admin", value=interaction.user.mention, inline=True)
+                embed.add_field(name="Nouveau Niveau", value=str(new_level), inline=True)
+                await log_core.send_log(interaction.guild, "xp_gain", embed)
 
             await interaction.response.send_message(
                 f"Retrait de {xp_amount} XP à {user.mention} (par {interaction.user.mention}).", ephemeral=True
