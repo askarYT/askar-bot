@@ -15,7 +15,7 @@ LOG_EVENTS = [
     "channel_create", "channel_delete", "channel_update",  # Salons
     "role_create", "role_delete", "role_update",           # Rôles Serveur
     "guild_update", "automod_update",                      # Serveur
-    "voice_join", "voice_leave", "voice_move",             # Vocal
+    "voice_join", "voice_leave", "voice_move", "voice_channel_status_update", # Vocal
     "xp_gain",                                             # XP
     "command_use"                                          # Commandes
 ]

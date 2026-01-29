@@ -15,8 +15,20 @@ class Warn(commands.Cog):
         # --- LOGGING DEBUT ACTION ---
         logging.info(f"Action Warn demandée par {ctx.author} (ID: {ctx.author.id}) sur {member} (ID: {member.id}). Raison: {reason}")
 
-        # On diffère la réponse
-        await ctx.defer(ephemeral=True)
+        if ctx.interaction:
+            await ctx.defer(ephemeral=True)
+
+        # --- VALIDATION DES PERMISSIONS ET DE LA HIERARCHIE ---
+        if member == ctx.author:
+            await ctx.send("❌ Vous ne pouvez pas vous avertir vous-même.", ephemeral=True)
+            return
+        if member.id == ctx.guild.owner_id:
+            await ctx.send("❌ Vous ne pouvez pas avertir le propriétaire du serveur.", ephemeral=True)
+            return
+        # L'avertissement est moins grave, on peut autoriser sur un rôle égal, mais pas supérieur.
+        if ctx.author.top_role < member.top_role and ctx.author.id != ctx.guild.owner_id:
+            await ctx.send("❌ Vous ne pouvez pas avertir un membre avec un rôle supérieur au vôtre.", ephemeral=True)
+            return
 
         # Envoi du message privé
         sent_dm = False

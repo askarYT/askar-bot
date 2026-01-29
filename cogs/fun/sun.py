@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import asyncio
-from .xp_system import has_xp_permission
+from cogs.xp_system import has_xp_permission
 
 class SunGame(commands.Cog):
     def __init__(self, bot):

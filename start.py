@@ -42,7 +42,7 @@ async def on_app_command_error(interaction: discord.Interaction, error: app_comm
 
 class MyBot(commands.Bot):
     async def setup_hook(self):
-        for extension in ['random','ping','mimir','poke','sun','xp_system',
+        for extension in ['fun.random','fun.ping','fun.mimir','fun.poke','fun.sun','xp_system',
                           'notifications.youtube_notifier', 'notifications.twitch_notifier',
                           'twitch_follower', 'server.join_server', 'server.leave_server', 'moderation.kick',
                           'moderation.ban', 'moderation.softban', 'moderation.tempban', 'moderation.unban',

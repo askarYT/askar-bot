@@ -133,6 +133,12 @@ class XPSystem(commands.Cog):
                         try:
                             await member.add_roles(role, reason=f"Atteint le niveau {level_role['level']}")
                             logging.info(f"Rôle '{role.name}' attribué à {member.name} (ID: {member.id}) pour avoir atteint le niveau {level_role['level']}.")
+                            
+                            # --- LOGGING ROLE REWARD ---
+                            log_core = self.bot.get_cog("LogCore")
+                            if log_core:
+                                embed = discord.Embed(title="🎁 Récompense XP", description=f"{member.mention} a reçu le rôle {role.mention} (Niveau {level_role['level']}).", color=discord.Color.gold())
+                                await log_core.send_log(guild, "xp_gain", embed)
                         except discord.Forbidden:
                             logging.warning(f"Permission manquante pour attribuer le rôle '{role.name}' à {member.name} (ID: {member.id}).")
                         except Exception as e:
@@ -238,6 +244,13 @@ class XPSystem(commands.Cog):
         self.last_message_xp[user_id] = now
         xp_gained = random.randint(XP_LIMITS["message"]["min"], XP_LIMITS["message"]["max"])
         old_level, new_level = self.update_user_data(user_id, message.author.name, xp_gained, source="Message")
+        
+        # --- LOGGING XP GAIN (Message) ---
+        log_core = self.bot.get_cog("LogCore")
+        if log_core:
+            embed = discord.Embed(description=f"**+{xp_gained} XP** pour {message.author.mention} (Message).", color=discord.Color.blue())
+            await log_core.send_log(message.guild, "xp_gain", embed)
+
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
             # Log Level Up
@@ -267,6 +280,13 @@ class XPSystem(commands.Cog):
         self.reaction_tracking[message_id].add(user_id)
         xp_gained = random.randint(XP_LIMITS["reaction"]["min"], XP_LIMITS["reaction"]["max"])
         old_level, new_level = self.update_user_data(user_id, user.name, xp_gained, source="Réaction")
+        
+        # --- LOGGING XP GAIN (Reaction) ---
+        log_core = self.bot.get_cog("LogCore")
+        if log_core:
+            embed = discord.Embed(description=f"**+{xp_gained} XP** pour {user.mention} (Réaction).", color=discord.Color.blue())
+            await log_core.send_log(reaction.message.guild, "xp_gain", embed)
+
         if old_level is not None and new_level > old_level:
             await self.handle_level_up(user_id, old_level, new_level)
             # Log Level Up (Réaction)
@@ -308,6 +328,13 @@ class XPSystem(commands.Cog):
 
                 xp_gained = random.randint(XP_LIMITS["vocal"]["min"], XP_LIMITS["vocal"]["max"])
                 old_level, new_level = self.update_user_data(str(member.id), member.name, xp_gained, source="Vocal")
+                
+                # --- LOGGING XP GAIN (Vocal) ---
+                log_core = self.bot.get_cog("LogCore")
+                if log_core:
+                    embed = discord.Embed(description=f"**+{xp_gained} XP** pour {member.mention} (Vocal).", color=discord.Color.blue())
+                    await log_core.send_log(member.guild, "xp_gain", embed)
+
                 if old_level is not None and new_level > old_level:
                     await self.handle_level_up(str(member.id), old_level, new_level)
                     await self.handle_level_up(str(member.id), member.name, old_level, new_level)
@@ -527,6 +554,8 @@ class XPSystem(commands.Cog):
             if not level_roles:
                 continue
 
+            changes = [] # Liste pour stocker les modifications de cette resync
+
             for member in guild.members:
                 if member.bot:
                     continue
@@ -540,10 +569,21 @@ class XPSystem(commands.Cog):
                         try:
                             await member.add_roles(role, reason="Resynchronisation automatique des rôles par niveau")
                             logging.info(f"Rôle '{role.name}' réattribué à {member.name} (ID: {member.id}) (niveau {level}) via resync.")
+                            changes.append(f"{member.mention} : +{role.mention} (Niveau {level})")
                         except discord.Forbidden:
                             logging.warning(f"Permission manquante pour réattribuer le rôle '{role.name}' à {member.name} (ID: {member.id}) via resync.")
                         except Exception as e:
                             logging.error(f"Erreur lors de la réattribution automatique du rôle : {e}")
+            
+            # --- LOGGING RESYNC AUTO ---
+            if changes:
+                log_core = self.bot.get_cog("LogCore")
+                if log_core:
+                    desc = "\n".join(changes[:20])
+                    if len(changes) > 20:
+                        desc += f"\n... et {len(changes)-20} autres."
+                    embed = discord.Embed(title="🔄 Resync Rôles XP (Auto)", description=desc, color=discord.Color.blurple())
+                    await log_core.send_log(guild, "xp_gain", embed)
 
     @sync_roles_task.before_loop
     async def before_sync_roles(self):
@@ -563,6 +603,7 @@ class XPSystem(commands.Cog):
             return
 
         count = 0
+        changes = []
         for member in guild.members:
             if member.bot:
                 continue
@@ -574,9 +615,25 @@ class XPSystem(commands.Cog):
                     try:
                         await member.add_roles(role, reason="Synchronisation manuelle des rôles")
                         logging.info(f"Rôle '{role.name}' attribué à {member.name} (ID: {member.id}) via resync manuel.")
+                        changes.append(f"{member.mention} : +{role.mention} (Niveau {level})")
                         count += 1
                     except Exception as e:
                         logging.error(f"Erreur lors de la synchronisation manuelle des rôles : {e}")
+
+        # --- LOGGING RESYNC MANUEL ---
+        log_core = self.bot.get_cog("LogCore")
+        if log_core:
+            if changes:
+                desc = "\n".join(changes[:20])
+                if len(changes) > 20:
+                    desc += f"\n... et {len(changes)-20} autres."
+                embed = discord.Embed(title="🔄 Resync Rôles XP (Manuel)", description=desc, color=discord.Color.blurple())
+                embed.add_field(name="Exécuté par", value=interaction.user.mention)
+                await log_core.send_log(guild, "xp_gain", embed)
+            else:
+                embed = discord.Embed(title="🔄 Resync Rôles XP (Manuel)", description="Aucune modification nécessaire.", color=discord.Color.light_grey())
+                embed.add_field(name="Exécuté par", value=interaction.user.mention)
+                await log_core.send_log(guild, "xp_gain", embed)
 
         await interaction.followup.send(f"Synchronisation terminée. {count} rôles attribués.")
 

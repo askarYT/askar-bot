@@ -48,18 +48,36 @@ class Tempban(commands.Cog):
         return total_seconds
 
     @commands.hybrid_command(name="tempban", description="Bannir temporairement un membre.")
-    @app_commands.describe(member="Le membre à bannir", duration="Durée (ex: 1d, 2h, 30m)", reason="La raison")
+    @app_commands.describe(member="Le membre à bannir", duration="Durée du ban (ex: 1d, 2h, 30m)", delete_messages="Durée des messages à supprimer (ex: 1h, 2d, 0s). Max 7d.", reason="La raison")
     @commands.has_permissions(ban_members=True)
-    async def tempban(self, ctx: commands.Context, member: discord.Member, duration: str, *, reason: str = "Aucune raison fournie"):
+    async def tempban(self, ctx: commands.Context, member: discord.Member, duration: str, delete_messages: str = "0s", *, reason: str = "Aucune raison fournie"):
         """Bannit un membre pour une durée déterminée."""
         # --- LOGGING DEBUT ACTION ---
         logging.info(f"Action Tempban demandée par {ctx.author} (ID: {ctx.author.id}) sur {member} (ID: {member.id}). Durée: {duration}, Raison: {reason}")
 
-        await ctx.defer(ephemeral=True)
+        if ctx.interaction:
+            await ctx.defer(ephemeral=True)
 
+        # --- VALIDATION DES PERMISSIONS ET DE LA HIERARCHIE ---
+        if member == ctx.author:
+            await ctx.send("❌ Vous ne pouvez pas vous bannir vous-même.", ephemeral=True)
+            return
+        if member.id == ctx.guild.owner_id:
+            await ctx.send("❌ Vous ne pouvez pas bannir le propriétaire du serveur.", ephemeral=True)
+            return
+        if ctx.author.top_role <= member.top_role and ctx.author.id != ctx.guild.owner_id:
+            await ctx.send("❌ Vous ne pouvez pas bannir un membre avec un rôle égal ou supérieur au vôtre.", ephemeral=True)
+            return
+
+        # --- PARSE DURATIONS ---
         seconds = self.parse_duration(duration)
         if not seconds:
             await ctx.send("❌ Format de durée invalide. Utilisez `s` (secondes), `m` (minutes), `h` (heures), `d` (jours). Ex: `1d`, `2h30m`.")
+            return
+        
+        delete_seconds = self.parse_duration(delete_messages) if delete_messages not in ["0", "0s"] else 0
+        if delete_seconds is None or delete_seconds > 604800:
+            await ctx.send("❌ Durée de suppression de messages invalide ou supérieure à 7 jours.", ephemeral=True)
             return
 
         unban_time = datetime.now(timezone.utc) + timedelta(seconds=seconds)
@@ -78,9 +96,13 @@ class Tempban(commands.Cog):
 
         # Bannissement Discord
         try:
-            await member.ban(reason=f"Tempban ({duration}): {reason}")
+            await member.ban(reason=f"Tempban ({duration}): {reason}", delete_message_seconds=delete_seconds)
             # --- LOGGING SUCCES BAN ---
             logging.info(f"Tempban: {member} banni sur Discord.")
+        except discord.Forbidden:
+            logging.error(f"Erreur Forbidden lors du tempban de {member}.")
+            await ctx.send(f"❌ Je n'ai pas les permissions nécessaires pour bannir ce membre. (Erreur `Forbidden`)")
+            return
         except Exception as e:
             # --- LOGGING ERREUR BAN ---
             logging.error(f"Erreur lors du tempban (action ban) de {member} : {e}")
@@ -112,7 +134,16 @@ class Tempban(commands.Cog):
             await log_core.send_log(ctx.guild, "tempban", embed)
 
         # Message de confirmation
-        await ctx.send(f"✅ **{member.name}** a été banni pour **{duration}**. Raison : *{reason}*")
+        delete_msg_confirmation = f"Suppression des messages des {delete_messages}." if delete_seconds > 0 else "Aucun message supprimé."
+        await ctx.send(f"✅ **{member.name}** a été banni pour **{duration}**. {delete_msg_confirmation} Raison : *{reason}*")
+
+    @tempban.error
+    async def tempban_error(self, ctx: commands.Context, error: commands.CommandError):
+        """Gestionnaire d'erreurs pour la commande tempban."""
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(f"❌ **Erreur :** Argument manquant. Usage : `.tempban <membre> <durée> [durée_suppr_msg] [raison]`", ephemeral=True)
+        elif isinstance(error, commands.MemberNotFound):
+            await ctx.send(f"❌ **Erreur :** Membre `{error.argument}` introuvable.", ephemeral=True)
 
     @tasks.loop(minutes=1)
     async def check_tempbans(self):

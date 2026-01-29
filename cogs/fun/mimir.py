@@ -2,7 +2,7 @@ import random
 import discord
 from discord import app_commands
 from discord.ext import commands
-from .xp_system import has_xp_permission
+from cogs.xp_system import has_xp_permission
 
 class Mimir(commands.Cog):
     def __init__(self, bot):

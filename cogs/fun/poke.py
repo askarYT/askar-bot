@@ -1,7 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from .xp_system import has_xp_permission
+from cogs.xp_system import has_xp_permission
 
 class Poke(commands.Cog):
     def __init__(self, bot):

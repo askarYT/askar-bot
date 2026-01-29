@@ -15,8 +15,9 @@ class Unban(commands.Cog):
         # --- LOGGING DEBUT ACTION ---
         logging.info(f"Action Unban demandée par {ctx.author} (ID: {ctx.author.id}) pour l'entrée '{user}'. Raison: {reason}")
 
-        # On diffère la réponse pour éviter le timeout si la recherche est longue
-        await ctx.defer(ephemeral=True)
+        # On diffère la réponse pour les interactions slash
+        if ctx.interaction:
+            await ctx.defer(ephemeral=True)
 
         user_obj = None
         
@@ -69,6 +70,13 @@ class Unban(commands.Cog):
             # --- LOGGING ERREUR ACTION ---
             logging.error(f"Erreur lors du débannissement de {user_obj} : {e}")
             await ctx.send(f"❌ Impossible de débannir **{user_obj.name}** : {e}")
+
+    @unban.error
+    async def unban_error(self, ctx: commands.Context, error: commands.CommandError):
+        """Gestionnaire d'erreurs pour la commande unban."""
+        if isinstance(error, commands.MissingRequiredArgument):
+            if error.param.name == 'user':
+                await ctx.send("❌ **Erreur :** Vous devez spécifier un utilisateur (Nom#Tag ou ID).\nUsage : `.unban <utilisateur> [raison]`", ephemeral=True)
 
     @unban.autocomplete('user')
     async def unban_autocomplete(self, interaction: discord.Interaction, current: str):
