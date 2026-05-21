@@ -18,7 +18,7 @@ class YouTubeMessageModal(ui.Modal):
         self.video_message_input = ui.TextInput(
             label="Message pour les Vidéos",
             style=discord.TextStyle.paragraph,
-            placeholder="Utilisez {channel} et {mention}. Laissez vide pour le message par défaut.",
+            placeholder="Utilisez {channel}, {mention} et {url}. Laissez vide pour le message par défaut.",
             default=current_video_message,
             required=False,
             max_length=500
@@ -28,7 +28,7 @@ class YouTubeMessageModal(ui.Modal):
         self.short_message_input = ui.TextInput(
             label="Message pour les Shorts",
             style=discord.TextStyle.paragraph,
-            placeholder="Utilisez {channel} et {mention}. Laissez vide pour le message par défaut.",
+            placeholder="Utilisez {channel}, {mention} et {url}. Laissez vide pour le message par défaut.",
             default=current_short_message,
             required=False,
             max_length=500
@@ -169,7 +169,7 @@ class YouTubeNotifier(commands.Cog):
                     # Construire le message de notification
                     role_id = alert.get('short_role_id') if is_short else alert.get('video_role_id')
                     role = discord_channel.guild.get_role(role_id) if role_id else None
-                    role_mention = f"-# {role.mention}" if role else ""
+                    role_mention = role.mention if role else ""
 
                     custom_message_template = alert.get('custom_short_message') if is_short else alert.get('custom_video_message')
 
@@ -182,9 +182,9 @@ class YouTubeNotifier(commands.Cog):
 
                     if custom_message_template:
                         # Le placeholder {mention} est remplacé par le texte formaté du rôle
-                        content_message = custom_message_template.format(channel=channel_name, mention=role_mention)
+                        content_message = custom_message_template.format(channel=channel_name, mention=role_mention, url=video_url)
                     else:
-                        content_message = f"{default_message}\n{role_mention}"
+                        content_message = f"{default_message}\n-# {role_mention}" if role else default_message
 
                     try:
                         await discord_channel.send(content=content_message.strip())
@@ -396,29 +396,29 @@ class YouTubeNotifier(commands.Cog):
         try:
             # --- Test pour une VIDÉO ---
             video_role = interaction.guild.get_role(alert.get('video_role_id')) if alert.get('video_role_id') else None
-            video_role_mention = f"-# {video_role.mention}" if video_role else ""
+            video_role_mention = video_role.mention if video_role else ""
             custom_video_message_template = alert.get('custom_video_message')
+            video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Lien de test
 
             if custom_video_message_template:
-                video_content = custom_video_message_template.format(channel=channel_name, mention=video_role_mention)
+                video_content = custom_video_message_template.format(channel=channel_name, mention=video_role_mention, url=video_url)
             else:
-                video_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ" # Lien de test
                 default_video_message = f"**{channel_name}** a publié une nouvelle [**Vidéo**]({video_url}) ! 📹 (Ceci est un test)"
-                video_content = f"{default_video_message}\n{video_role_mention}"
+                video_content = f"{default_video_message}\n-# {video_role_mention}" if video_role else default_video_message
 
             await channel.send(content=video_content.strip())
 
             # --- Test pour un SHORT ---
             short_role = interaction.guild.get_role(alert.get('short_role_id')) if alert.get('short_role_id') else None
-            short_role_mention = f"-# {short_role.mention}" if short_role else ""
+            short_role_mention = short_role.mention if short_role else ""
             custom_short_message_template = alert.get('custom_short_message')
+            short_url = "https://www.youtube.com/shorts/c_n_F5j6_eA" # Lien de test
 
             if custom_short_message_template:
-                short_content = custom_short_message_template.format(channel=channel_name, mention=short_role_mention)
+                short_content = custom_short_message_template.format(channel=channel_name, mention=short_role_mention, url=short_url)
             else:
-                short_url = "https://www.youtube.com/shorts/c_n_F5j6_eA" # Lien de test
                 default_short_message = f"**{channel_name}** a publié un nouveau [**Short**]({short_url}) ! 🎬 (Ceci est un test)"
-                short_content = f"{default_short_message}\n{short_role_mention}"
+                short_content = f"{default_short_message}\n-# {short_role_mention}" if short_role else default_short_message
 
             await channel.send(content=short_content.strip())
 
