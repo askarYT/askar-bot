@@ -21,6 +21,11 @@ YDL_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'cookiefile': COOKIES_PATH,
+    'extractor_args': {
+        'youtube': {
+            'player_client': ['ios', 'android_vr', 'web'],
+        }
+    },
 }
 
 # Options FFmpeg
