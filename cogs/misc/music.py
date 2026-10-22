@@ -11,7 +11,7 @@ COOKIES_PATH = os.path.join(ROOT_DIR, "cookies.txt")
 
 # Options yt-dlp avec le chemin précis des cookies
 YDL_OPTIONS = {
-    'format': 'bestaudio/best',
+    'format': 'best',  # Laisse yt-dlp choisir le meilleur flux global disponible sans trier par audio/vidéo séparé
     'noplaylist': True,
     'nocheckcertificate': True,
     'ignoreerrors': False,
@@ -23,7 +23,7 @@ YDL_OPTIONS = {
     'cookiefile': COOKIES_PATH,
     'extractor_args': {
         'youtube': {
-            'player_client': ['ios', 'android_vr', 'web'],
+            'player_client': ['web'],  # On se restreint au client Web standard avec cookies
         }
     },
 }
