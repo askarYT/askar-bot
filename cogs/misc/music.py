@@ -11,7 +11,7 @@ COOKIES_PATH = os.path.join(ROOT_DIR, "cookies.txt")
 
 # Options yt-dlp avec le chemin précis des cookies
 YDL_OPTIONS = {
-    'format': 'ba/b',
+    'format': 'bestaudio',
     'noplaylist': True,
     'extractaudio': True,
     'audioformat': 'mp3',
