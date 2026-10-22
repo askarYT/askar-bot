@@ -11,13 +11,8 @@ COOKIES_PATH = os.path.join(ROOT_DIR, "cookies.txt")
 
 # Options yt-dlp avec le chemin précis des cookies
 YDL_OPTIONS = {
-    'format': 'bestaudio',
+    'format': 'bestaudio/best',
     'noplaylist': True,
-    'extractaudio': True,
-    'audioformat': 'mp3',
-    'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-    'restrictfilenames': True,
-    'updatetime': False,
     'nocheckcertificate': True,
     'ignoreerrors': False,
     'logtostderr': False,
@@ -25,8 +20,7 @@ YDL_OPTIONS = {
     'no_warnings': True,
     'default_search': 'auto',
     'source_address': '0.0.0.0',
-    'cookiefile': COOKIES_PATH,  # Pointe directement vers le fichier à la racine
-    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+    'cookiefile': COOKIES_PATH,
 }
 
 # Options FFmpeg
