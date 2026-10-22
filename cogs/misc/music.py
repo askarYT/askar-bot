@@ -21,6 +21,7 @@ YDL_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'cookiefile' : 'cookies.txt',
+    'cookies' : 'cookies.txt',
 }
 
 # Options FFmpeg
