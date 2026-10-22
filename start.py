@@ -47,7 +47,7 @@ class MyBot(commands.Bot):
                           'twitch_follower', 'server.join_server', 'server.leave_server', 'moderation.kick',
                           'moderation.ban', 'moderation.softban', 'moderation.tempban', 'moderation.unban',
                           'moderation.warn', 'logs.log_core', 'logs.events_messages', 'logs.events_server',
-                          'logs.events_members', 'logs.events_voice', 'logs.events_commands']:
+                          'logs.events_members', 'logs.events_voice', 'logs.events_commands', 'misc.music']:
             await self.load_extension(f'cogs.{extension}')
             logging.info(f'Loaded: cogs.{extension}')
 
