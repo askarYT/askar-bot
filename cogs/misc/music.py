@@ -26,6 +26,7 @@ YDL_OPTIONS = {
     'default_search': 'auto',
     'source_address': '0.0.0.0',
     'cookiefile': COOKIES_PATH,  # Pointe directement vers le fichier à la racine
+    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
 }
 
 # Options FFmpeg
